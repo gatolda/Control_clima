@@ -1,17 +1,15 @@
 """
-main.py - Programa principal para el sistema de control climático (versión debug)
+main.py - Prueba de sensores sin inicializar placa de relés
 """
 
 import time
 from logica.modos import ModeManager, Modo
-from logica.controlador import ControladorClima
-from Actuadores.relay import RelayBoard
 from Sensores.temp_humidity import TempHumiditySensor
 
 
 def seleccionar_modo_inicial():
     """Pregunta al usuario el modo de operación al inicio"""
-    print("==== Sistema de Control Climático ====")
+    print("==== Sistema de Control Climático (PRUEBA SIN RELÉS) ====")
     print("Selecciona el modo de operación:")
     print("1 - Manual")
     print("2 - Automático")
@@ -27,34 +25,28 @@ def seleccionar_modo_inicial():
 
 
 def main():
-    print("🔄 Iniciando sistema...")
+    print("🔄 Iniciando prueba de sensores...")
     # Configurar el modo inicial
     modo_inicial = seleccionar_modo_inicial()
     mode_manager = ModeManager(modo_inicial)
     print(f"✅ Modo actual: {mode_manager.obtener_modo().value}")
 
-    # Inicializar sensores y actuadores
-    print("📡 Inicializando sensores y actuadores...")
+    # Inicializar solo el sensor
+    print("📡 Inicializando sensor de temperatura/humedad...")
     sensor = TempHumiditySensor(pin=4)  # Ajusta el pin según tu hardware
-    actuador = RelayBoard(relay_pins=[12, 38])  # Pines para CH1 y CH2
-    controlador = ControladorClima(sensor, actuador, mode_manager)
-    print("✅ Sensores y actuadores inicializados correctamente.")
+    print("✅ Sensor inicializado correctamente.")
 
-    # Ciclo de prueba: solo 1 iteración para debug
+    # Ciclo de prueba: solo 1 iteración
     try:
-        print("🔁 Iniciando ciclo de lectura y control (1 iteración)...")
-        for _ in range(1):
-            # Leer sensores
-            datos = controlador.leer_sensores()
-            print(f"📡 Lectura sensores: {datos}")
+        print("🔁 Leyendo sensores (1 iteración)...")
+        datos = sensor.read()
+        print(f"📡 Lectura sensores: {datos}")
 
-            # Aplicar lógica según el modo
-            controlador.aplicar_modo(datos)
-            print("✅ Lógica aplicada según el modo actual.")
+        # Pausa para observar
+        print("⏳ Esperando 2 segundos...\n")
+        time.sleep(2)
 
-            # Pausa entre ciclos
-            print("⏳ Esperando 2 segundos...\n")
-            time.sleep(2)
+        print("✅ Fin de la prueba. Sin relés ni controlador.")
 
     except KeyboardInterrupt:
         print("\n🛑 Programa detenido por el usuario.")

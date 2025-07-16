@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+env/
+venv/
+ENV/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE files
+.vscode/
+.idea/
+
+# Calibration and local data
+*.log
+*.db
+*.sqlite
+calibracion_pwm.txt
+
+# Python egg
+*.egg
+*.egg-info/
+
+# Backup files
+*.bak
+*.swp
+
+# Ignore sync script logs
+sync.log

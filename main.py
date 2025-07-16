@@ -1,5 +1,5 @@
 """
-main.py - Programa principal para el sistema de control climático
+main.py - Programa principal para el sistema de control climático (versión debug)
 """
 
 import time
@@ -27,28 +27,33 @@ def seleccionar_modo_inicial():
 
 
 def main():
+    print("🔄 Iniciando sistema...")
     # Configurar el modo inicial
     modo_inicial = seleccionar_modo_inicial()
     mode_manager = ModeManager(modo_inicial)
     print(f"✅ Modo actual: {mode_manager.obtener_modo().value}")
 
     # Inicializar sensores y actuadores
+    print("📡 Inicializando sensores y actuadores...")
     sensor = TempHumiditySensor(pin=4)  # Ajusta el pin según tu hardware
     actuador = RelayBoard(relay_pins=[12, 38])  # Pines para CH1 y CH2
     controlador = ControladorClima(sensor, actuador, mode_manager)
+    print("✅ Sensores y actuadores inicializados correctamente.")
 
-    # Iniciar el ciclo principal
+    # Ciclo de prueba: solo 1 iteración para debug
     try:
-        while True:
+        print("🔁 Iniciando ciclo de lectura y control (1 iteración)...")
+        for _ in range(1):
             # Leer sensores
             datos = controlador.leer_sensores()
             print(f"📡 Lectura sensores: {datos}")
 
             # Aplicar lógica según el modo
             controlador.aplicar_modo(datos)
+            print("✅ Lógica aplicada según el modo actual.")
 
             # Pausa entre ciclos
-            print("---- Esperando 2 segundos ----\n")
+            print("⏳ Esperando 2 segundos...\n")
             time.sleep(2)
 
     except KeyboardInterrupt:

@@ -1,3 +1,5 @@
+print("✅ Cargando módulo Sensores/temp_humidity.py desde la ruta correcta")
+
 import Adafruit_DHT
 
 class TempHumiditySensor:
@@ -13,13 +15,14 @@ class TempHumiditySensor:
         """
         self.pin = pin
         self.sensor_type = sensor_type
+        print(f"🛠 DEBUG: Sensor inicializado en pin {self.pin} con tipo {self.sensor_type}")
 
     def read(self):
         """
         Lee la temperatura y la humedad desde el sensor.
         :return: Diccionario con temperatura (°C), humedad (%) y status ("OK" o "ERROR").
         """
-        print("🛠 DEBUG: Entrando a TempHumiditySensor.read()")
+        print(f"🛠 DEBUG: Llamando a read() en pin {self.pin}")
         humedad, temperatura = Adafruit_DHT.read_retry(self.sensor_type, self.pin)
         print(f"🛠 DEBUG: Resultado de Adafruit_DHT.read_retry = Temp:{temperatura}, Hum:{humedad}")
 

@@ -1,5 +1,5 @@
 """
-main.py - Sistema de control climático (corregido con sensor probado)
+main.py - Sistema de control climático (con DEBUG)
 """
 
 import time
@@ -55,9 +55,9 @@ def main():
 
     try:
         while True:
-            # Leer sensores
+            print("🛠 DEBUG: Entrando a controlador.leer_sensores()")
             datos = controlador.leer_sensores()
-            print(f"📡 Lectura sensores: {datos}")
+            print(f"🛠 DEBUG: Salí de controlador.leer_sensores() con datos = {datos}")
 
             # Aplicar lógica según el modo
             controlador.aplicar_modo(datos)

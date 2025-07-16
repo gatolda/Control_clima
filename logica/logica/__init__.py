@@ -1,6 +1,5 @@
 """
-Paquete que concentra la lógica del sistema de control climático.
-Expone las clases principales para su uso desde el resto del proyecto.
+Paquete logica para el sistema de control climático.
 """
 
 from .modos import Modo, ModeManager

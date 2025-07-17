@@ -1,52 +1,39 @@
-"""
-main.py
-Programa principal que carga la configuración y muestra información básica
-"""
-
-from config_loader import ConfigLoader
 import time
+import Adafruit_DHT
+from config_loader import ConfigLoader
 
-def mostrar_configuracion(config):
-    print("\n==== CONFIGURACIÓN DEL SISTEMA ====")
-    # Mostrar Sensores
-    print("📡 Sensores:")
-    sensores = config.obtener("sensores", {})
-    for nombre, datos in sensores.items():
-        print(f"  - {nombre.capitalize()}: Pin={datos.get('pin')} Tipo={datos.get('tipo')}")
+# Cargar la configuración
+config = ConfigLoader("config.yml")
+print("✅ Configuración cargada correctamente desde config.yml\n")
 
-    # Mostrar Actuadores
-    print("⚡ Actuadores:")
-    actuadores = config.obtener("actuadores", {})
-    for nombre, datos in actuadores.items():
-        if nombre == "rele_board":
-            print(f"  - Placa de relés: Pines={datos.get('pines')} modo={datos.get('modo')}")
+# Mostrar la configuración cargada
+print("==== CONFIGURACIÓN DEL SISTEMA ====")
+print("📡 Sensores:")
+for sensor, settings in config.data.get("sensores", {}).items():
+    print(f"  - {sensor.capitalize()}: Pin={settings['pin']} Tipo={settings['tipo']}")
+print("⚡ Actuadores:")
+for act, settings in config.data.get("actuadores", {}).items():
+    print(f"  - {act.capitalize()}: Pines={settings['pines']} modo={settings['modo']}")
+print("====================================\n")
+
+# Inicializar el sensor DHT22
+dht_settings = config.data["sensores"]["temperatura_humedad"]
+sensor_type = Adafruit_DHT.DHT22 if dht_settings["tipo"] == "DHT22" else Adafruit_DHT.DHT11
+sensor_pin = dht_settings["pin"]
+
+print("🔄 Iniciando ciclo principal (lectura de DHT22)...")
+
+try:
+    while True:
+        # Leer temperatura y humedad
+        humidity, temperature = Adafruit_DHT.read_retry(sensor_type, sensor_pin)
+        if humidity is not None and temperature is not None:
+            print(f"🌡️ Temp: {temperature:.1f}°C  💧 Humedad: {humidity:.1f}%")
         else:
-            print(f"  - {nombre.capitalize()}")
+            print("❌ Error al leer el sensor DHT22")
 
-    print("====================================\n")
+        # Pausa entre lecturas
+        time.sleep(3)
 
-def main():
-    # Cargar configuración
-    config = ConfigLoader()
-    try:
-        config.cargar_configuracion()
-    except Exception as e:
-        print(f"❌ Error cargando configuración: {e}")
-        return
-
-    # Mostrar la configuración cargada
-    mostrar_configuracion(config)
-
-    # Ciclo principal (simulación)
-    print("🔄 Iniciando ciclo principal...")
-    try:
-        while True:
-            # Aquí en el futuro leeremos sensores y controlaremos actuadores
-            print("📡 Leyendo sensores... (simulado)")
-            print("⚡ Gestionando actuadores... (simulado)")
-            time.sleep(5)
-    except KeyboardInterrupt:
-        print("\n🛑 Programa detenido por el usuario.")
-
-if __name__ == "__main__":
-    main()
+except KeyboardInterrupt:
+    print("\n🛑 Programa detenido por el usuario.")

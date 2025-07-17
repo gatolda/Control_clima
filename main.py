@@ -1,46 +1,41 @@
 """
 main.py
-Sistema de Control Climático usando configuración YAML
+Programa principal del sistema de control climático
 """
 
-import time
 from config_loader import ConfigLoader
+from sensor_reader import SensorReader
+import time
 
-# Cargar la configuración
+# 🔧 Cargar configuración
 config = ConfigLoader()
 config.cargar_configuracion()
 
-# Mostrar configuración cargada
-print("\n==== CONFIGURACIÓN DEL SISTEMA ====")
-sensores = config.obtener("sensores", {})
-for sensor, settings in sensores.items():
-    pin = settings.get("pin", "N/A")
-    tipo = settings.get("tipo", "N/A")
-    print(f"📡 {sensor}: Pin={pin} Tipo={tipo}")
+# 📡 Inicializar SensorReader
+sensor_reader = SensorReader(config)
 
-actuadores = config.obtener("actuadores", {})
-for act, settings in actuadores.items():
-    pines = settings.get("pines", {})
-    tipo_activacion = settings.get("tipo_activacion", "N/A")
-    print(f"⚡ {act}: Pines={pines} Activación={tipo_activacion}")
+# ✅ Mostrar configuración
+print("\n==== CONFIGURACIÓN DEL SISTEMA ====")
+for sensor, settings in config.obtener("sensores").items():
+    print(f"📡 {sensor}: Tipo={settings['tipo']} Pin={settings.get('pin', 'N/A')}")
 print("====================================\n")
 
-# Ciclo principal simulado
+# 🔄 Bucle principal
 print("🔄 Iniciando ciclo principal...")
 try:
     while True:
-        # Leer sensores (simulado)
-        print("📡 Leyendo sensores...")
-        for sensor, settings in sensores.items():
-            tipo = settings.get("tipo", "N/A")
-            pin = settings.get("pin", "N/A")
-            print(f"🌡️ Sensor: {sensor} | Tipo: {tipo} | Pin: {pin}")
+        # Leer sensores
+        datos = sensor_reader.leer_todos()
+        print("📊 Lecturas actuales:")
+        for sensor, lectura in datos.items():
+            print(f"  📡 {sensor}: {lectura}")
 
-        # Gestionar actuadores (simulado)
-        print("⚡ Gestionando actuadores...")
+        # TODO: Gestionar actuadores aquí
+        print("⚡ Gestionando actuadores...\n")
 
-        # Esperar intervalo definido en config
+        # Esperar intervalo configurado
         intervalo = config.obtener("general.intervalo_lectura", 5)
+        print(f"⏳ Esperando {intervalo} segundos...\n")
         time.sleep(intervalo)
 
 except KeyboardInterrupt:

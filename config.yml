@@ -1,0 +1,59 @@
+# Configuración del sistema de control climático
+
+general:
+  nombre_sistema: "Control Climático Raspberry Pi"
+  ubicacion: "Invernadero Principal"
+  intervalo_lectura: 5   # Intervalo entre lecturas en segundos
+  modo_inicial: "manual" # Opciones: manual, automatico
+
+sensores:
+  temperatura_humedad:
+    tipo: DHT22
+    pin: 4
+    nombre: "Sensor Temp/Humedad"
+  co2:
+    tipo: MH-Z19
+    uart_port: "/dev/serial0"
+    baudrate: 9600
+    nombre: "Sensor CO2"
+  # humedad_suelo:
+  #   tipo: capacitivo
+  #   pin: A0
+  #   nombre: "Sensor Humedad Suelo"
+  #   arduino: true
+
+actuadores:
+  rele_board:
+    pines:
+      ventiladores: 12
+      filtro_carbon: 13
+      intractor: 15
+      humidificador: 16
+      deshumidificador: 18
+      luz: 22
+      calefactor: 29
+      aire_acondicionado: 31
+      ozono: 33
+    tipo_activacion: "activo_bajo" # Opciones: activo_alto, activo_bajo
+    nombre: "Placa de Relés"
+
+umbrales_automatico:
+  temperatura:
+    min: 20.0
+    max: 26.0
+  humedad:
+    min: 50.0
+    max: 70.0
+  co2:
+    min: 400
+    max: 800
+
+notificaciones:
+  habilitadas: false
+  telegram_token: ""
+  telegram_chat_id: ""
+
+logs:
+  habilitar_logs: true
+  nivel: "INFO"
+  archivo: "logs/sistema.log"

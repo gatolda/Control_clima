@@ -1,64 +1,52 @@
 """
-main.py - Programa principal para el sistema de control climático
+main.py
+Programa principal que carga la configuración y muestra información básica
 """
 
-import RPi.GPIO as GPIO
+from config_loader import ConfigLoader
 import time
-from logica.modos import ModeManager, Modo
-from logica.controlador import ControladorClima
-from Actuadores.relay import RelayBoard
-from Sensores.temp_humidity import TempHumiditySensor
 
-# Limpia los pines GPIO antes de iniciar para evitar conflictos
-print("⚡ Limpiando configuración previa de GPIO...")
-GPIO.cleanup()
+def mostrar_configuracion(config):
+    print("\n==== CONFIGURACIÓN DEL SISTEMA ====")
+    # Mostrar Sensores
+    print("📡 Sensores:")
+    sensores = config.obtener("sensores", {})
+    for nombre, datos in sensores.items():
+        print(f"  - {nombre.capitalize()}: Pin={datos.get('pin')} Tipo={datos.get('tipo')}")
 
-def seleccionar_modo_inicial():
-    """Pregunta al usuario el modo de operación al inicio"""
-    print("==== Sistema de Control Climático ====")
-    print("Selecciona el modo de operación:")
-    print("1 - Manual")
-    print("2 - Automático")
-    opcion = input("Ingresa el número de opción: ")
+    # Mostrar Actuadores
+    print("⚡ Actuadores:")
+    actuadores = config.obtener("actuadores", {})
+    for nombre, datos in actuadores.items():
+        if nombre == "rele_board":
+            print(f"  - Placa de relés: Pines={datos.get('pines')} modo={datos.get('modo')}")
+        else:
+            print(f"  - {nombre.capitalize()}")
 
-    if opcion == "1":
-        return Modo.MANUAL
-    elif opcion == "2":
-        return Modo.AUTOMATICO
-    else:
-        print("⚠️ Opción inválida. Iniciando en modo Manual por defecto.")
-        return Modo.MANUAL
-
+    print("====================================\n")
 
 def main():
-    # Configurar el modo inicial
-    modo_inicial = seleccionar_modo_inicial()
-    mode_manager = ModeManager(modo_inicial)
-    print(f"✅ Modo actual: {mode_manager.obtener_modo().value}")
-
-    # Inicializar sensores y actuadores
+    # Cargar configuración
+    config = ConfigLoader()
     try:
-        sensor = TempHumiditySensor(pin=4)  # Ajusta el pin según tu hardware
-        print("📡 Sensor inicializado correctamente.")
-        actuador = RelayBoard(relay_pins=[12, 38])  # Ajusta los pines a tu placa
-        print("⚡ Placa de relés inicializada correctamente.")
+        config.cargar_configuracion()
+    except Exception as e:
+        print(f"❌ Error cargando configuración: {e}")
+        return
 
-        controlador = ControladorClima(sensor, actuador, mode_manager)
+    # Mostrar la configuración cargada
+    mostrar_configuracion(config)
 
-        # Iniciar el ciclo principal
+    # Ciclo principal (simulación)
+    print("🔄 Iniciando ciclo principal...")
+    try:
         while True:
-            print("🛠 DEBUG: Entrando a controlador.leer_sensores()")
-            datos = controlador.leer_sensores()
-            print(f"📡 Lectura sensores: {datos}")
-            print("✅ Lógica aplicada según el modo actual.")
-            time.sleep(2)
-
+            # Aquí en el futuro leeremos sensores y controlaremos actuadores
+            print("📡 Leyendo sensores... (simulado)")
+            print("⚡ Gestionando actuadores... (simulado)")
+            time.sleep(5)
     except KeyboardInterrupt:
         print("\n🛑 Programa detenido por el usuario.")
-    finally:
-        print("⚡ Liberando los pines GPIO...")
-        GPIO.cleanup()
-
 
 if __name__ == "__main__":
     main()

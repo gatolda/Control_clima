@@ -15,12 +15,15 @@ class ManualMode:
         try:
             while True:
                 # Mostrar lecturas de sensores
-                datos = self.sensor_reader.read_all_sensors()
-                print("📊 Sensores:")
-                for sensor, lectura in datos.items():
-                    temp = lectura.get("temperature", "N/A")
-                    hum = lectura.get("humidity", "N/A")
-                    print(f"  🌡️ {sensor}: {temp}°C 💧 {hum}%")
+                datos = self.sensor_reader.read_all()
+                if datos is None or not datos:
+                    print("⚠️ No se pudieron leer datos de los sensores.")
+                else:
+                    print("📊 Sensores:")
+                    for sensor, lectura in datos.items():
+                        temp = lectura.get("temperature", "N/A")
+                        hum = lectura.get("humidity", "N/A")
+                        print(f"  🌡️ {sensor}: {temp}°C 💧 {hum}%")
 
                 # Leer comando
                 comando = input("💻 Comando: ").strip().lower()
@@ -43,4 +46,5 @@ class ManualMode:
         except KeyboardInterrupt:
             print("\n🛑 Programa detenido por el usuario.")
         finally:
+            print("♻️ Liberando GPIO...")
             self.actuator_manager.cleanup()

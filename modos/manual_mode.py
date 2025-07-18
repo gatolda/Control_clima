@@ -1,10 +1,6 @@
-# modos/manual_mode.py
 import time
 
 class ManualMode:
-    """
-    Clase para gestionar el modo manual
-    """
     def __init__(self, sensor_reader, actuator_manager):
         self.sensor_reader = sensor_reader
         self.actuator_manager = actuator_manager
@@ -19,7 +15,7 @@ class ManualMode:
         try:
             while True:
                 # Mostrar lecturas de sensores
-                datos = self.sensor_reader.read_all()
+                datos = self.sensor_reader.read_all_sensors()
                 print("📊 Sensores:")
                 for sensor, lectura in datos.items():
                     temp = lectura.get("temperature", "N/A")

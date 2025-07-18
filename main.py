@@ -6,19 +6,23 @@ from modos.manual_mode import modo_manual
 import time
 
 # === INICIALIZACIÓN ===
+actuator_manager = None  # Predefinir para evitar NameError
+
 try:
     # Cargar configuración
-    config = ConfigLoader()
-    config.cargar_configuracion()
+    config_loader = ConfigLoader()
+    config_loader.cargar_configuracion()
+
+    # Obtener el diccionario de configuración
+    sensores_config = config_loader.obtener("sensores", {})
+    actuadores_config = config_loader.obtener("actuadores.rele_board.pines", {})
 
     # Inicializar sensores
-    sensores_config = config.obtener("sensores", {})
     sensor_reader = SensorReader(sensores_config)
     print(f"✅ SensorReader inicializado con sensores: {list(sensores_config.keys())}")
 
     # Inicializar actuadores
-    relay_pins = config.obtener("actuadores.rele_board.pines", {})
-    actuator_manager = ActuatorManager(relay_pins)
+    actuator_manager = ActuatorManager(actuadores_config)
 
     # Mostrar configuración cargada
     print("\n==== CONFIGURACIÓN DEL SISTEMA ====")
@@ -28,7 +32,7 @@ try:
         print(f"📡 {nombre}: Tipo={tipo} Pin={pin}")
 
     print("⚡ Actuadores (Relés):")
-    for nombre, pin in relay_pins.items():
+    for nombre, pin in actuadores_config.items():
         print(f"  - {nombre}: Pin {pin}")
     print("====================================\n")
 
@@ -48,5 +52,6 @@ try:
 except Exception as e:
     print(f"❌ Error: {e}")
 finally:
-    actuator_manager.cleanup()
-    print("♻️ GPIO liberado.")
+    if actuator_manager:
+        actuator_manager.cleanup()
+        print("♻️ GPIO liberado.")

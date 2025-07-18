@@ -1,61 +1,53 @@
 import time
 
 class AutomaticMode:
-    def __init__(self, sensor_reader, actuator_manager, config):
+    def __init__(self, sensor_reader, actuator_manager, umbrales):
         self.sensor_reader = sensor_reader
         self.actuator_manager = actuator_manager
-        self.umbrales = config.obtener("umbrales_automatico", {})
-        self.intervalo = config.obtener("general.intervalo_lectura", 5)
-        print("🤖 Modo automático inicializado con umbrales:", self.umbrales)
+        self.umbrales = umbrales  # Ya es un dict directo
+        print(f"🤖 Modo automático inicializado con umbrales: {self.umbrales}")
 
     def run(self):
         print("=== 🤖 MODO AUTOMÁTICO ===")
         print("📈 Gestionando sensores y actuadores según umbrales...")
+
         try:
             while True:
                 datos = self.sensor_reader.read_all()
-                temperatura = datos.get("temperatura_humedad", {}).get("temperature")
-                humedad = datos.get("temperatura_humedad", {}).get("humidity")
+                temp = datos["temperatura_humedad"].get("temperature")
+                hum = datos["temperatura_humedad"].get("humidity")
+                print(f"🌡️ Temp: {temp}°C, 💧 Hum: {hum}%")
 
-                # --- Temperatura ---
-                if temperatura is not None:
-                    temp_min = self.umbrales.get("temperatura", {}).get("min", 0)
-                    temp_max = self.umbrales.get("temperatura", {}).get("max", 50)
-
-                    if temperatura > temp_max:
-                        print(f"🌡️ {temperatura}°C > {temp_max}°C → Encendiendo ventiladores.")
+                # Gestionar temperatura
+                if temp is not None:
+                    if temp > self.umbrales["temperatura"]["max"]:
+                        print("⚠️ Temperatura alta. Activando ventiladores...")
                         self.actuator_manager.turn_on("ventiladores")
-                        self.actuator_manager.turn_off("calefactor")
-                    elif temperatura < temp_min:
-                        print(f"🌡️ {temperatura}°C < {temp_min}°C → Encendiendo calefactor.")
+                    elif temp < self.umbrales["temperatura"]["min"]:
+                        print("❄️ Temperatura baja. Activando calefactor...")
                         self.actuator_manager.turn_on("calefactor")
-                        self.actuator_manager.turn_off("ventiladores")
                     else:
-                        print(f"🌡️ {temperatura}°C en rango → Apagando calefactor y ventiladores.")
+                        print("🌡️ Temperatura dentro de rango. Apagando ventiladores y calefactor.")
                         self.actuator_manager.turn_off("ventiladores")
                         self.actuator_manager.turn_off("calefactor")
 
-                # --- Humedad ---
-                if humedad is not None:
-                    hum_min = self.umbrales.get("humedad", {}).get("min", 30)
-                    hum_max = self.umbrales.get("humedad", {}).get("max", 70)
-
-                    if humedad > hum_max:
-                        print(f"💧 {humedad}% > {hum_max}% → Encendiendo deshumidificador.")
+                # Gestionar humedad
+                if hum is not None:
+                    if hum > self.umbrales["humedad"]["max"]:
+                        print("⚠️ Humedad alta. Activando deshumidificador...")
                         self.actuator_manager.turn_on("deshumidificador")
-                        self.actuator_manager.turn_off("humidificador")
-                    elif humedad < hum_min:
-                        print(f"💧 {humedad}% < {hum_min}% → Encendiendo humidificador.")
+                    elif hum < self.umbrales["humedad"]["min"]:
+                        print("💧 Humedad baja. Activando humidificador...")
                         self.actuator_manager.turn_on("humidificador")
-                        self.actuator_manager.turn_off("deshumidificador")
                     else:
-                        print(f"💧 {humedad}% en rango → Apagando humidificador y deshumidificador.")
+                        print("💧 Humedad dentro de rango. Apagando humidificador y deshumidificador.")
                         self.actuator_manager.turn_off("humidificador")
                         self.actuator_manager.turn_off("deshumidificador")
 
-                time.sleep(self.intervalo)
+                time.sleep(5)  # Ajusta al intervalo deseado
 
         except KeyboardInterrupt:
-            print("\n🛑 Modo automático detenido por el usuario.")
+            print("\n🛑 Programa detenido por el usuario.")
         finally:
             self.actuator_manager.cleanup()
+            print("♻️ GPIO liberado correctamente.")

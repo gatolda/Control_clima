@@ -2,44 +2,49 @@
 import RPi.GPIO as GPIO
 
 class ActuatorManager:
-    def __init__(self, relay_pins):
-        """
-        Inicializa la placa de relés
-        :param relay_pins: Diccionario con nombres y pines {nombre: pin}
-        """
-        self.relay_pins = relay_pins
-        GPIO.setmode(GPIO.BOARD)  # Usa la numeración física
-        self.states = {}
+    """
+    Gestiona los actuadores conectados a la placa de relés
+    """
+    def __init__(self, config):
+        self.relay_pins = config.obtener("actuadores.rele_board.pines", {})
+        self.relay_mode = config.obtener("actuadores.rele_board.tipo_activacion", "activo_bajo")
+        self.estado = {nombre: False for nombre in self.relay_pins}
 
         print("⚡ Inicializando actuadores...")
+        GPIO.setmode(GPIO.BOARD)
         for nombre, pin in self.relay_pins.items():
+            print(f"🔌 Configurando {nombre} en pin {pin}...")
             GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, GPIO.LOW)  # Apaga por defecto
-            self.states[nombre] = False
-            print(f"✅ {nombre} listo en pin {pin} (apagado)")
+            # Por defecto los desactivamos según tipo de activación
+            if self.relay_mode == "activo_bajo":
+                GPIO.output(pin, GPIO.HIGH)
+            else:
+                GPIO.output(pin, GPIO.LOW)
 
     def turn_on(self, nombre):
         if nombre in self.relay_pins:
-            GPIO.output(self.relay_pins[nombre], GPIO.HIGH)
-            self.states[nombre] = True
-            print(f"🔛 Actuador '{nombre}' ENCENDIDO")
+            pin = self.relay_pins[nombre]
+            GPIO.output(pin, GPIO.LOW if self.relay_mode == "activo_bajo" else GPIO.HIGH)
+            self.estado[nombre] = True
+            print(f"✅ {nombre} ACTIVADO")
         else:
-            print(f"❌ Actuador '{nombre}' no encontrado")
+            print(f"❌ Actuador '{nombre}' no encontrado.")
 
     def turn_off(self, nombre):
         if nombre in self.relay_pins:
-            GPIO.output(self.relay_pins[nombre], GPIO.LOW)
-            self.states[nombre] = False
-            print(f"🔌 Actuador '{nombre}' APAGADO")
+            pin = self.relay_pins[nombre]
+            GPIO.output(pin, GPIO.HIGH if self.relay_mode == "activo_bajo" else GPIO.LOW)
+            self.estado[nombre] = False
+            print(f"✅ {nombre} DESACTIVADO")
         else:
-            print(f"❌ Actuador '{nombre}' no encontrado")
+            print(f"❌ Actuador '{nombre}' no encontrado.")
 
     def status(self):
-        print("📊 Estado de actuadores:")
-        for nombre, state in self.states.items():
-            estado = "ON" if state else "OFF"
-            print(f"  - {nombre}: {estado}")
+        print("📋 Estado de actuadores:")
+        for nombre, activo in self.estado.items():
+            estado_str = "ON" if activo else "OFF"
+            print(f"  - {nombre}: {estado_str}")
 
     def cleanup(self):
-        print("♻️ Liberando pines GPIO...")
+        print("♻️ Liberando GPIO...")
         GPIO.cleanup()

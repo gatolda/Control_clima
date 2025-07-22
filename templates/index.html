@@ -2,26 +2,66 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Sistema de Control Climático</title>
+    <title>🌱 Control Climático</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>🌱 Sistema de Control Climático</h1>
+    <div class="container">
+        <h1>🌱 Dashboard de Control Climático</h1>
 
-    <section id="sensores">
-        <h2>📡 Sensores</h2>
-        <p>🌡️ Temperatura: <span id="temp">--</span> °C</p>
-        <p>💧 Humedad: <span id="hum">--</span> %</p>
-        <p>🫁 CO₂: <span id="co2">--</span> ppm</p>
-    </section>
-
-    <section id="actuadores">
-        <h2>⚡ Actuadores</h2>
-        <div id="botones">
-            <!-- Se generan dinámicamente -->
+        <div class="sensores">
+            <h2>📡 Sensores</h2>
+            <div id="sensor-data">
+                <!-- Los datos se cargarán aquí vía AJAX -->
+                <p>Cargando lecturas...</p>
+            </div>
         </div>
-    </section>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+        <div class="actuadores">
+            <h2>⚡ Actuadores</h2>
+            {% for nombre in actuator_manager.relay_pins.keys() %}
+            <div class="actuador">
+                <span>{{ nombre }}</span>
+                <button onclick="controlActuador('{{ nombre }}', 'on')" class="btn-on">Encender</button>
+                <button onclick="controlActuador('{{ nombre }}', 'off')" class="btn-off">Apagar</button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        // Actualiza las lecturas cada 5 segundos
+        function actualizarSensores() {
+            fetch('/api/sensores')
+                .then(response => response.json())
+                .then(data => {
+                    let html = "";
+                    for (const [sensor, lectura] of Object.entries(data)) {
+                        html += `<div class="sensor">
+                                    <strong>${sensor}</strong>: 
+                                    🌡️ ${lectura.temperature ?? "N/A"}°C, 
+                                    💧 ${lectura.humidity ?? "N/A"}%
+                                </div>`;
+                    }
+                    document.getElementById("sensor-data").innerHTML = html;
+                })
+                .catch(err => {
+                    document.getElementById("sensor-data").innerHTML = "<p>❌ Error al cargar datos</p>";
+                });
+        }
+
+        function controlActuador(actuador, accion) {
+            fetch(`/api/actuador/${actuador}/${accion}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(`✅ ${data.actuador} ${data.estado}`);
+            });
+        }
+
+        setInterval(actualizarSensores, 5000);
+        window.onload = actualizarSensores;
+    </script>
 </body>
 </html>

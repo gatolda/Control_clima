@@ -7,15 +7,43 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
             background: #f0f4f8;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         h1 {
             color: #2c7a7b;
+            margin-top: 20px;
         }
         #chart-container {
-            width: 80%;
-            margin: auto;
+            width: 60%;
+            margin: 20px auto;
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #botones {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px;
+        }
+        .btn {
+            background: #2c7a7b;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #285e61;
         }
     </style>
 </head>
@@ -23,6 +51,15 @@
     <h1>🌱 Dashboard Control Climático</h1>
     <div id="chart-container">
         <canvas id="sensorChart"></canvas>
+    </div>
+
+    <div id="botones">
+        <button class="btn" onclick="controlActuador('ventiladores', 'on')">Encender Ventiladores</button>
+        <button class="btn" onclick="controlActuador('ventiladores', 'off')">Apagar Ventiladores</button>
+        <button class="btn" onclick="controlActuador('humidificador', 'on')">Encender Humidificador</button>
+        <button class="btn" onclick="controlActuador('humidificador', 'off')">Apagar Humidificador</button>
+        <button class="btn" onclick="controlActuador('deshumidificador', 'on')">Encender Deshumidificador</button>
+        <button class="btn" onclick="controlActuador('deshumidificador', 'off')">Apagar Deshumidificador</button>
     </div>
 
     <script>
@@ -62,13 +99,12 @@
             }
         });
 
-        // Función para actualizar el gráfico
         async function actualizarDatos() {
             const response = await fetch('/api/lecturas');
             const data = await response.json();
             const tiempo = new Date().toLocaleTimeString();
 
-            // Agregar datos
+            // Limitar a los últimos 10 puntos
             if (sensorChart.data.labels.length > 10) {
                 sensorChart.data.labels.shift();
                 sensorChart.data.datasets[0].data.shift();
@@ -84,7 +120,13 @@
             sensorChart.update();
         }
 
-        setInterval(actualizarDatos, 5000); // Actualiza cada 5 segundos
+        async function controlActuador(actuador, accion) {
+            const response = await fetch(`/api/actuador/${actuador}/${accion}`);
+            const result = await response.json();
+            alert(result.status);
+        }
+
+        setInterval(actualizarDatos, 5000); // Actualiza cada 5s
     </script>
 </body>
 </html>

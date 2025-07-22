@@ -2,66 +2,89 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>🌱 Control Climático</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>🌱 Dashboard Control Climático</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #f0f4f8;
+        }
+        h1 {
+            color: #2c7a7b;
+        }
+        #chart-container {
+            width: 80%;
+            margin: auto;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🌱 Dashboard de Control Climático</h1>
-
-        <div class="sensores">
-            <h2>📡 Sensores</h2>
-            <div id="sensor-data">
-                <!-- Los datos se cargarán aquí vía AJAX -->
-                <p>Cargando lecturas...</p>
-            </div>
-        </div>
-
-        <div class="actuadores">
-            <h2>⚡ Actuadores</h2>
-            {% for nombre in actuator_manager.relay_pins.keys() %}
-            <div class="actuador">
-                <span>{{ nombre }}</span>
-                <button onclick="controlActuador('{{ nombre }}', 'on')" class="btn-on">Encender</button>
-                <button onclick="controlActuador('{{ nombre }}', 'off')" class="btn-off">Apagar</button>
-            </div>
-            {% endfor %}
-        </div>
+    <h1>🌱 Dashboard Control Climático</h1>
+    <div id="chart-container">
+        <canvas id="sensorChart"></canvas>
     </div>
 
     <script>
-        // Actualiza las lecturas cada 5 segundos
-        function actualizarSensores() {
-            fetch('/api/sensores')
-                .then(response => response.json())
-                .then(data => {
-                    let html = "";
-                    for (const [sensor, lectura] of Object.entries(data)) {
-                        html += `<div class="sensor">
-                                    <strong>${sensor}</strong>: 
-                                    🌡️ ${lectura.temperature ?? "N/A"}°C, 
-                                    💧 ${lectura.humidity ?? "N/A"}%
-                                </div>`;
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Tiempos
+                datasets: [
+                    {
+                        label: '🌡️ Temperatura (°C)',
+                        data: [],
+                        borderColor: 'red',
+                        fill: false
+                    },
+                    {
+                        label: '💧 Humedad (%)',
+                        data: [],
+                        borderColor: 'blue',
+                        fill: false
+                    },
+                    {
+                        label: '🫁 CO₂ (ppm)',
+                        data: [],
+                        borderColor: 'green',
+                        fill: false
                     }
-                    document.getElementById("sensor-data").innerHTML = html;
-                })
-                .catch(err => {
-                    document.getElementById("sensor-data").innerHTML = "<p>❌ Error al cargar datos</p>";
-                });
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+
+        // Función para actualizar el gráfico
+        async function actualizarDatos() {
+            const response = await fetch('/api/lecturas');
+            const data = await response.json();
+            const tiempo = new Date().toLocaleTimeString();
+
+            // Agregar datos
+            if (sensorChart.data.labels.length > 10) {
+                sensorChart.data.labels.shift();
+                sensorChart.data.datasets[0].data.shift();
+                sensorChart.data.datasets[1].data.shift();
+                sensorChart.data.datasets[2].data.shift();
+            }
+
+            sensorChart.data.labels.push(tiempo);
+            sensorChart.data.datasets[0].data.push(data.temperatura_humedad.temperature || 0);
+            sensorChart.data.datasets[1].data.push(data.temperatura_humedad.humidity || 0);
+            sensorChart.data.datasets[2].data.push(data.co2.co2 || 0);
+
+            sensorChart.update();
         }
 
-        function controlActuador(actuador, accion) {
-            fetch(`/api/actuador/${actuador}/${accion}`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(`✅ ${data.actuador} ${data.estado}`);
-            });
-        }
-
-        setInterval(actualizarSensores, 5000);
-        window.onload = actualizarSensores;
+        setInterval(actualizarDatos, 5000); // Actualiza cada 5 segundos
     </script>
 </body>
 </html>

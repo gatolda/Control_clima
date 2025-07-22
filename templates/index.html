@@ -2,143 +2,129 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>🌱 Dashboard Control Climático</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>🌱 Control Climático Futurista</title>
+    <script src="https://cdn.jsdelivr.net/npm/@bernii/gauge.js/dist/gauge.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background: #f4f6f8;
-            margin: 0;
-            padding: 0;
+            background: #0f2027;  /* Futurista */
+            background: linear-gradient(to right, #2c5364, #203a43, #0f2027);
+            color: #fff;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
+            min-height: 100vh;
         }
-        h1 {
-            color: #2c7a7b;
-            margin: 20px;
+        .gauges-container {
+            display: flex;
+            justify-content: space-around;
+            width: 90%;
+            margin-bottom: 20px;
         }
-        .chart-container {
-            width: 60%;
-            max-width: 600px;
-            margin: 10px auto;
-            background: #fff;
-            border-radius: 10px;
-            padding: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        .gauge {
+            width: 250px;
+            height: 250px;
         }
-        #lecturas {
-            margin: 15px 0;
-            font-size: 1.2em;
-            background: #e2f0f1;
-            padding: 10px 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.05);
-        }
-        #botones {
+        .controls {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
             gap: 10px;
-            margin: 20px;
         }
-        .btn {
-            background: #2c7a7b;
-            color: #fff;
+        button {
+            background-color: #00b894;
             border: none;
-            padding: 10px 15px;
+            padding: 12px 20px;
+            font-size: 16px;
+            color: #fff;
             border-radius: 8px;
             cursor: pointer;
-            transition: background 0.3s ease;
+            transition: background 0.3s;
         }
-        .btn:hover {
-            background: #285e61;
+        button:hover {
+            background-color: #098b72;
         }
     </style>
 </head>
 <body>
-    <h1>🌱 Dashboard Control Climático</h1>
+    <h1>🌱 Panel de Control Climático</h1>
 
-    <div id="lecturas">
-        🌡️ Temp: <span id="temp">--</span> °C | 💧 Hum: <span id="hum">--</span>% | 🫁 CO₂: <span id="co2">--</span> ppm
-    </div>
-
-    <div class="chart-container">
-        <canvas id="tempChart"></canvas>
-    </div>
-    <div class="chart-container">
-        <canvas id="humChart"></canvas>
-    </div>
-    <div class="chart-container">
-        <canvas id="co2Chart"></canvas>
+    <div class="gauges-container">
+        <canvas id="tempGauge" class="gauge"></canvas>
+        <canvas id="humGauge" class="gauge"></canvas>
+        <canvas id="co2Gauge" class="gauge"></canvas>
     </div>
 
-    <div id="botones">
-        <button class="btn" onclick="controlActuador('ventiladores', 'on')">Encender Ventiladores</button>
-        <button class="btn" onclick="controlActuador('ventiladores', 'off')">Apagar Ventiladores</button>
-        <button class="btn" onclick="controlActuador('humidificador', 'on')">Encender Humidificador</button>
-        <button class="btn" onclick="controlActuador('humidificador', 'off')">Apagar Humidificador</button>
-        <button class="btn" onclick="controlActuador('deshumidificador', 'on')">Encender Deshumidificador</button>
-        <button class="btn" onclick="controlActuador('deshumidificador', 'off')">Apagar Deshumidificador</button>
+    <div class="controls">
+        {% for nombre in actuadores %}
+        <button onclick="controlActuador('{{nombre}}', 'on')">Encender {{nombre}}</button>
+        <button onclick="controlActuador('{{nombre}}', 'off')">Apagar {{nombre}}</button>
+        {% endfor %}
     </div>
 
     <script>
-        const tempCtx = document.getElementById('tempChart').getContext('2d');
-        const humCtx = document.getElementById('humChart').getContext('2d');
-        const co2Ctx = document.getElementById('co2Chart').getContext('2d');
-
-        const tempChart = new Chart(tempCtx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ label: '🌡️ Temperatura (°C)', data: [], borderColor: 'red', fill: false }] },
-            options: { responsive: true }
+        const tempGauge = new Gauge(document.getElementById("tempGauge")).setOptions({
+            angle: 0,
+            lineWidth: 0.3,
+            radiusScale: 1,
+            pointer: { length: 0.6, color: "#ff4757" },
+            staticLabels: { font: "14px sans-serif", labels: [0, 10, 20, 30, 40], color: "#fff" },
+            staticZones: [
+                {strokeStyle: "#00e676", min: 0, max: 20},  // verde
+                {strokeStyle: "#ffeb3b", min: 20, max: 26}, // amarillo
+                {strokeStyle: "#ff3d00", min: 26, max: 40}  // rojo
+            ]
         });
+        tempGauge.maxValue = 40;
+        tempGauge.set(0);
 
-        const humChart = new Chart(humCtx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ label: '💧 Humedad (%)', data: [], borderColor: 'blue', fill: false }] },
-            options: { responsive: true }
+        const humGauge = new Gauge(document.getElementById("humGauge")).setOptions({
+            angle: 0,
+            lineWidth: 0.3,
+            radiusScale: 1,
+            pointer: { length: 0.6, color: "#1e90ff" },
+            staticLabels: { font: "14px sans-serif", labels: [0, 25, 50, 75, 100], color: "#fff" },
+            staticZones: [
+                {strokeStyle: "#00e676", min: 0, max: 50},
+                {strokeStyle: "#ffeb3b", min: 50, max: 70},
+                {strokeStyle: "#ff3d00", min: 70, max: 100}
+            ]
         });
+        humGauge.maxValue = 100;
+        humGauge.set(0);
 
-        const co2Chart = new Chart(co2Ctx, {
-            type: 'line',
-            data: { labels: [], datasets: [{ label: '🫁 CO₂ (ppm)', data: [], borderColor: 'green', fill: false }] },
-            options: { responsive: true }
+        const co2Gauge = new Gauge(document.getElementById("co2Gauge")).setOptions({
+            angle: 0,
+            lineWidth: 0.3,
+            radiusScale: 1,
+            pointer: { length: 0.6, color: "#fd7e14" },
+            staticLabels: { font: "14px sans-serif", labels: [0, 400, 800, 1200, 2000], color: "#fff" },
+            staticZones: [
+                {strokeStyle: "#00e676", min: 0, max: 800},
+                {strokeStyle: "#ffeb3b", min: 800, max: 1200},
+                {strokeStyle: "#ff3d00", min: 1200, max: 2000}
+            ]
         });
+        co2Gauge.maxValue = 2000;
+        co2Gauge.set(0);
 
-        async function actualizarDatos() {
-            const response = await fetch('/api/lecturas');
-            const data = await response.json();
-            const tiempo = new Date().toLocaleTimeString();
-
-            // Actualizar lecturas de texto
-            document.getElementById('temp').textContent = data.temperatura_humedad.temperature ?? '--';
-            document.getElementById('hum').textContent = data.temperatura_humedad.humidity ?? '--';
-            document.getElementById('co2').textContent = data.co2.co2 ?? '--';
-
-            // Actualizar gráficos
-            [tempChart, humChart, co2Chart].forEach(chart => {
-                if (chart.data.labels.length > 10) {
-                    chart.data.labels.shift();
-                    chart.data.datasets[0].data.shift();
-                }
-                chart.data.labels.push(tiempo);
-            });
-            tempChart.data.datasets[0].data.push(data.temperatura_humedad.temperature || 0);
-            humChart.data.datasets[0].data.push(data.temperatura_humedad.humidity || 0);
-            co2Chart.data.datasets[0].data.push(data.co2.co2 || 0);
-
-            tempChart.update();
-            humChart.update();
-            co2Chart.update();
+        function actualizarGauges() {
+            fetch("/api/lecturas")
+                .then(response => response.json())
+                .then(data => {
+                    tempGauge.set(data.temperatura_humedad.temperature || 0);
+                    humGauge.set(data.temperatura_humedad.humidity || 0);
+                    co2Gauge.set(data.co2.co2 || 0);
+                });
         }
+        setInterval(actualizarGauges, 2000); // cada 2 seg
 
-        async function controlActuador(actuador, accion) {
-            const response = await fetch(`/api/actuador/${actuador}/${accion}`);
-            const result = await response.json();
-            alert(result.status);
+        function controlActuador(actuador, accion) {
+            fetch(`/api/actuadores/${actuador}/${accion}`, { method: "POST" })
+                .then(() => alert(`${accion.toUpperCase()} ${actuador}`));
         }
-
-        setInterval(actualizarDatos, 5000); // Actualiza cada 5s
     </script>
 </body>
 </html>

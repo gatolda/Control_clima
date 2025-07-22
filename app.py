@@ -1,20 +1,40 @@
-import streamlit as st
+from flask import Flask, render_template, jsonify
+from sensor_reader import SensorReader
+from actuator_manager import ActuatorManager
+from config_loader import ConfigLoader
 
-st.set_page_config(page_title="Control de Clima Invernadero", layout="centered")
+# 🚀 Inicializar la app Flask
+app = Flask(__name__)
 
-st.title("🌱 Sistema de Control de Clima para Invernadero")
+# 📦 Cargar configuración y módulos
+config = ConfigLoader()
+config.cargar_configuracion()
+sensor_reader = SensorReader(config)
+actuator_manager = ActuatorManager(config)
 
-st.header("Variables Ambientales")
+# 🌐 Ruta principal que devuelve la página web
+@app.route("/")
+def dashboard():
+    return render_template("index.html")
 
-# Temperatura
-temp = st.slider('Temperatura (°C)', 10, 40, 22)
-# Humedad
-hum = st.slider('Humedad (%)', 30, 90, 60)
-# Humedad del Suelo
-soil = st.progress(0.5)  # Simula 50% (puedes conectar luego a tus sensores)
+# 🛰️ API para obtener las lecturas de sensores
+@app.route("/api/sensores")
+def api_sensores():
+    datos = sensor_reader.read_all()
+    return jsonify(datos)
 
-# Botón de Riego
-if st.button('💧 Activar Riego'):
-    st.success("¡Riego activado!")
+# 🛰️ API para encender o apagar un relé
+@app.route("/api/relay/<nombre>/<accion>")
+def api_relay(nombre, accion):
+    if accion == "on":
+        actuator_manager.turn_on(nombre)
+        return jsonify({"status": f"{nombre} activado"})
+    elif accion == "off":
+        actuator_manager.turn_off(nombre)
+        return jsonify({"status": f"{nombre} desactivado"})
+    else:
+        return jsonify({"error": "Acción no válida"}), 400
 
-st.write(f"Temperatura: {temp}°C | Humedad: {hum}%")
+# 🚀 Lanzar el servidor
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

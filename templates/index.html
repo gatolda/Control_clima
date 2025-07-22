@@ -18,7 +18,7 @@
             color: #2c7a7b;
             margin: 20px;
         }
-        #chart-container {
+        .chart-container {
             width: 60%;
             max-width: 600px;
             margin: 10px auto;
@@ -59,12 +59,18 @@
 <body>
     <h1>🌱 Dashboard Control Climático</h1>
 
-    <div id="chart-container">
-        <canvas id="sensorChart"></canvas>
-    </div>
-
     <div id="lecturas">
         🌡️ Temp: <span id="temp">--</span> °C | 💧 Hum: <span id="hum">--</span>% | 🫁 CO₂: <span id="co2">--</span> ppm
+    </div>
+
+    <div class="chart-container">
+        <canvas id="tempChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="humChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="co2Chart"></canvas>
     </div>
 
     <div id="botones">
@@ -77,40 +83,26 @@
     </div>
 
     <script>
-        const ctx = document.getElementById('sensorChart').getContext('2d');
-        const sensorChart = new Chart(ctx, {
+        const tempCtx = document.getElementById('tempChart').getContext('2d');
+        const humCtx = document.getElementById('humChart').getContext('2d');
+        const co2Ctx = document.getElementById('co2Chart').getContext('2d');
+
+        const tempChart = new Chart(tempCtx, {
             type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    {
-                        label: '🌡️ Temp (°C)',
-                        data: [],
-                        borderColor: 'red',
-                        fill: false
-                    },
-                    {
-                        label: '💧 Hum (%)',
-                        data: [],
-                        borderColor: 'blue',
-                        fill: false
-                    },
-                    {
-                        label: '🫁 CO₂ (ppm)',
-                        data: [],
-                        borderColor: 'green',
-                        fill: false
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: false
-                    }
-                }
-            }
+            data: { labels: [], datasets: [{ label: '🌡️ Temperatura (°C)', data: [], borderColor: 'red', fill: false }] },
+            options: { responsive: true }
+        });
+
+        const humChart = new Chart(humCtx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: '💧 Humedad (%)', data: [], borderColor: 'blue', fill: false }] },
+            options: { responsive: true }
+        });
+
+        const co2Chart = new Chart(co2Ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: '🫁 CO₂ (ppm)', data: [], borderColor: 'green', fill: false }] },
+            options: { responsive: true }
         });
 
         async function actualizarDatos() {
@@ -118,23 +110,26 @@
             const data = await response.json();
             const tiempo = new Date().toLocaleTimeString();
 
-            // Actualizar gráfico
-            if (sensorChart.data.labels.length > 10) {
-                sensorChart.data.labels.shift();
-                sensorChart.data.datasets[0].data.shift();
-                sensorChart.data.datasets[1].data.shift();
-                sensorChart.data.datasets[2].data.shift();
-            }
-            sensorChart.data.labels.push(tiempo);
-            sensorChart.data.datasets[0].data.push(data.temperatura_humedad.temperature || 0);
-            sensorChart.data.datasets[1].data.push(data.temperatura_humedad.humidity || 0);
-            sensorChart.data.datasets[2].data.push(data.co2.co2 || 0);
-            sensorChart.update();
-
-            // Actualizar texto
+            // Actualizar lecturas de texto
             document.getElementById('temp').textContent = data.temperatura_humedad.temperature ?? '--';
             document.getElementById('hum').textContent = data.temperatura_humedad.humidity ?? '--';
             document.getElementById('co2').textContent = data.co2.co2 ?? '--';
+
+            // Actualizar gráficos
+            [tempChart, humChart, co2Chart].forEach(chart => {
+                if (chart.data.labels.length > 10) {
+                    chart.data.labels.shift();
+                    chart.data.datasets[0].data.shift();
+                }
+                chart.data.labels.push(tiempo);
+            });
+            tempChart.data.datasets[0].data.push(data.temperatura_humedad.temperature || 0);
+            humChart.data.datasets[0].data.push(data.temperatura_humedad.humidity || 0);
+            co2Chart.data.datasets[0].data.push(data.co2.co2 || 0);
+
+            tempChart.update();
+            humChart.update();
+            co2Chart.update();
         }
 
         async function controlActuador(actuador, accion) {

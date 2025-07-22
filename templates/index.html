@@ -2,11 +2,26 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Control Climático</title>
+    <title>Sistema de Control Climático</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <h1>🌱 Sistema de Control Climático</h1>
-    <p>Bienvenido al prototipo de la interfaz web.</p>
-    <p>Pronto aquí veremos las lecturas de los sensores y botones para los actuadores.</p>
+
+    <section id="sensores">
+        <h2>📡 Sensores</h2>
+        <p>🌡️ Temperatura: <span id="temp">--</span> °C</p>
+        <p>💧 Humedad: <span id="hum">--</span> %</p>
+        <p>🫁 CO₂: <span id="co2">--</span> ppm</p>
+    </section>
+
+    <section id="actuadores">
+        <h2>⚡ Actuadores</h2>
+        <div id="botones">
+            <!-- Se generan dinámicamente -->
+        </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

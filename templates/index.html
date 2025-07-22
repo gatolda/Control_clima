@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: #f0f4f8;
+            background: #f4f6f8;
             margin: 0;
             padding: 0;
             display: flex;
@@ -16,15 +16,24 @@
         }
         h1 {
             color: #2c7a7b;
-            margin-top: 20px;
+            margin: 20px;
         }
         #chart-container {
             width: 60%;
-            margin: 20px auto;
+            max-width: 600px;
+            margin: 10px auto;
             background: #fff;
             border-radius: 10px;
-            padding: 15px;
+            padding: 10px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #lecturas {
+            margin: 15px 0;
+            font-size: 1.2em;
+            background: #e2f0f1;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.05);
         }
         #botones {
             display: flex;
@@ -37,10 +46,10 @@
             background: #2c7a7b;
             color: #fff;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 15px;
             border-radius: 8px;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: background 0.3s ease;
         }
         .btn:hover {
             background: #285e61;
@@ -49,8 +58,13 @@
 </head>
 <body>
     <h1>🌱 Dashboard Control Climático</h1>
+
     <div id="chart-container">
         <canvas id="sensorChart"></canvas>
+    </div>
+
+    <div id="lecturas">
+        🌡️ Temp: <span id="temp">--</span> °C | 💧 Hum: <span id="hum">--</span>% | 🫁 CO₂: <span id="co2">--</span> ppm
     </div>
 
     <div id="botones">
@@ -67,16 +81,16 @@
         const sensorChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: [], // Tiempos
+                labels: [],
                 datasets: [
                     {
-                        label: '🌡️ Temperatura (°C)',
+                        label: '🌡️ Temp (°C)',
                         data: [],
                         borderColor: 'red',
                         fill: false
                     },
                     {
-                        label: '💧 Humedad (%)',
+                        label: '💧 Hum (%)',
                         data: [],
                         borderColor: 'blue',
                         fill: false
@@ -104,20 +118,23 @@
             const data = await response.json();
             const tiempo = new Date().toLocaleTimeString();
 
-            // Limitar a los últimos 10 puntos
+            // Actualizar gráfico
             if (sensorChart.data.labels.length > 10) {
                 sensorChart.data.labels.shift();
                 sensorChart.data.datasets[0].data.shift();
                 sensorChart.data.datasets[1].data.shift();
                 sensorChart.data.datasets[2].data.shift();
             }
-
             sensorChart.data.labels.push(tiempo);
             sensorChart.data.datasets[0].data.push(data.temperatura_humedad.temperature || 0);
             sensorChart.data.datasets[1].data.push(data.temperatura_humedad.humidity || 0);
             sensorChart.data.datasets[2].data.push(data.co2.co2 || 0);
-
             sensorChart.update();
+
+            // Actualizar texto
+            document.getElementById('temp').textContent = data.temperatura_humedad.temperature ?? '--';
+            document.getElementById('hum').textContent = data.temperatura_humedad.humidity ?? '--';
+            document.getElementById('co2').textContent = data.co2.co2 ?? '--';
         }
 
         async function controlActuador(actuador, accion) {

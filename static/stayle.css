@@ -1,1 +1,32 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f3f4f6;
+    color: #333;
+    padding: 20px;
+}
 
+h1, h2 {
+    color: #2d6a4f;
+}
+
+#sensores, #actuadores {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+button {
+    margin: 5px;
+    padding: 8px 12px;
+    background-color: #40916c;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #1b4332;
+}

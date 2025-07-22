@@ -7,39 +7,39 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         body {
-            background: #0f2027;  /* Futurista */
             background: linear-gradient(to right, #2c5364, #203a43, #0f2027);
             color: #fff;
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            margin-top: 20px;
+            font-size: 2rem;
         }
         .gauges-container {
             display: flex;
-            justify-content: space-around;
-            width: 90%;
-            margin-bottom: 20px;
-        }
-        .gauge {
-            width: 250px;
-            height: 250px;
-        }
-        .controls {
-            display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            gap: 10px;
+            margin: 20px;
+            gap: 20px;
+        }
+        .gauge {
+            width: 200px;
+            height: 200px;
+        }
+        .controls {
+            margin-top: 20px;
         }
         button {
             background-color: #00b894;
             border: none;
-            padding: 12px 20px;
+            padding: 10px 15px;
             font-size: 16px;
             color: #fff;
             border-radius: 8px;
+            margin: 5px;
             cursor: pointer;
             transition: background 0.3s;
         }
@@ -65,65 +65,71 @@
     </div>
 
     <script>
+        // Gauge inicialización
         const tempGauge = new Gauge(document.getElementById("tempGauge")).setOptions({
             angle: 0,
-            lineWidth: 0.3,
-            radiusScale: 1,
+            lineWidth: 0.2,
             pointer: { length: 0.6, color: "#ff4757" },
-            staticLabels: { font: "14px sans-serif", labels: [0, 10, 20, 30, 40], color: "#fff" },
             staticZones: [
-                {strokeStyle: "#00e676", min: 0, max: 20},  // verde
-                {strokeStyle: "#ffeb3b", min: 20, max: 26}, // amarillo
-                {strokeStyle: "#ff3d00", min: 26, max: 40}  // rojo
-            ]
+                {strokeStyle: "#00e676", min: 0, max: 20},
+                {strokeStyle: "#ffeb3b", min: 20, max: 26},
+                {strokeStyle: "#ff3d00", min: 26, max: 40}
+            ],
+            staticLabels: { font: "12px sans-serif", labels: [0, 10, 20, 30, 40], color: "#fff" }
         });
         tempGauge.maxValue = 40;
         tempGauge.set(0);
 
         const humGauge = new Gauge(document.getElementById("humGauge")).setOptions({
             angle: 0,
-            lineWidth: 0.3,
-            radiusScale: 1,
+            lineWidth: 0.2,
             pointer: { length: 0.6, color: "#1e90ff" },
-            staticLabels: { font: "14px sans-serif", labels: [0, 25, 50, 75, 100], color: "#fff" },
             staticZones: [
                 {strokeStyle: "#00e676", min: 0, max: 50},
                 {strokeStyle: "#ffeb3b", min: 50, max: 70},
                 {strokeStyle: "#ff3d00", min: 70, max: 100}
-            ]
+            ],
+            staticLabels: { font: "12px sans-serif", labels: [0, 25, 50, 75, 100], color: "#fff" }
         });
         humGauge.maxValue = 100;
         humGauge.set(0);
 
         const co2Gauge = new Gauge(document.getElementById("co2Gauge")).setOptions({
             angle: 0,
-            lineWidth: 0.3,
-            radiusScale: 1,
+            lineWidth: 0.2,
             pointer: { length: 0.6, color: "#fd7e14" },
-            staticLabels: { font: "14px sans-serif", labels: [0, 400, 800, 1200, 2000], color: "#fff" },
             staticZones: [
                 {strokeStyle: "#00e676", min: 0, max: 800},
                 {strokeStyle: "#ffeb3b", min: 800, max: 1200},
                 {strokeStyle: "#ff3d00", min: 1200, max: 2000}
-            ]
+            ],
+            staticLabels: { font: "12px sans-serif", labels: [0, 400, 800, 1200, 2000], color: "#fff" }
         });
         co2Gauge.maxValue = 2000;
         co2Gauge.set(0);
 
         function actualizarGauges() {
             fetch("/api/lecturas")
-                .then(response => response.json())
+                .then(res => res.json())
                 .then(data => {
                     tempGauge.set(data.temperatura_humedad.temperature || 0);
                     humGauge.set(data.temperatura_humedad.humidity || 0);
                     co2Gauge.set(data.co2.co2 || 0);
+                })
+                .catch(() => {
+                    // Datos de prueba si falla la API
+                    tempGauge.set(Math.random() * 40);
+                    humGauge.set(Math.random() * 100);
+                    co2Gauge.set(Math.random() * 2000);
                 });
         }
-        setInterval(actualizarGauges, 2000); // cada 2 seg
+
+        setInterval(actualizarGauges, 2000);
 
         function controlActuador(actuador, accion) {
             fetch(`/api/actuadores/${actuador}/${accion}`, { method: "POST" })
-                .then(() => alert(`${accion.toUpperCase()} ${actuador}`));
+                .then(() => alert(`${accion.toUpperCase()} ${actuador}`))
+                .catch(() => alert("⚠️ Error al enviar comando"));
         }
     </script>
 </body>

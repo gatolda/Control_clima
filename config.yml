@@ -13,7 +13,7 @@ sensores:
     nombre: "Sensor Temp/Humedad"
   co2:
     tipo: CO2_PWM
-    pin: 17
+    pin: 11
     nombre: "Sensor CO2 por PWM"
 
 # Puedes habilitar este sensor si más adelante usas humedad de suelo con Arduino

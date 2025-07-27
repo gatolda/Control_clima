@@ -2,34 +2,41 @@ import RPi.GPIO as GPIO
 import time
 
 class CO2PWMSensor:
-    def __init__(self, pin=17):
+    def __init__(self, pin):
         self.pin = pin
-        GPIO.setmode(GPIO.BCM)
+        GPIO.setmode(GPIO.BOARD)  # usamos BOARD para mantener consistencia
         GPIO.setup(self.pin, GPIO.IN)
-    
-    def read(self):
+        print(f"🌿 Sensor PWM CO₂ inicializado en pin físico {self.pin} (BOARD)")
+
+    def read_co2(self):
         try:
-            # Espera a que comience el pulso
+            # Espera a flanco de bajada y subida para medir duración del pulso alto
             GPIO.wait_for_edge(self.pin, GPIO.FALLING)
             start = time.time()
-
-            # Espera a que termine el pulso
             GPIO.wait_for_edge(self.pin, GPIO.RISING)
-            end = time.time()
+            duration = time.time() - start
 
-            # Calcula duración del pulso en microsegundos
-            duration = (end - start) * 1_000_000
+            high_level_time = duration * 1_000_000  # en microsegundos
+            co2_concentration = self._calculate_co2(high_level_time)
 
-            # Conversión PWM a ppm (según hoja técnica del MH-Z19)
-            ppm = (duration - 2000) * 5000 / (10000 - 2000)
-
-            return {
-                "co2": int(ppm),
-                "pulse": int(duration)
-            }
+            return int(co2_concentration)
         except Exception as e:
-            print(f"⚠️ Error en lectura PWM: {e}")
+            print(f"⚠️ Error leyendo PWM: {e}")
             return None
 
-    def cleanup(self):
-        GPIO.cleanup(self.pin)
+    def _calculate_co2(self, high_level_time_us):
+        """
+        Calcula la concentración de CO₂ a partir del tiempo de pulso.
+        Fórmula del datasheet para modo PWM:
+        ppm = 5000 * (Th - 2000us) / (Th + Tl - 4000us)
+        En este caso, Th es el pulso alto y asumimos ciclo total de 1004ms (1004000us)
+        """
+        Th = high_level_time_us
+        cycle_time_us = 1004000
+        Tl = cycle_time_us - Th
+
+        if Th + Tl < 4000:
+            return 0  # fuera de rango
+
+        ppm = 5000 * (Th - 2000) / (Th + Tl - 4000)
+        return max(0, min(ppm, 5000))  # limitado entre 0 y 5000 ppm

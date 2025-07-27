@@ -12,15 +12,16 @@ sensores:
     pin: 4
     nombre: "Sensor Temp/Humedad"
   co2:
-    tipo: MH-Z19
-    uart_port: "/dev/serial0"
-    baudrate: 9600
-    nombre: "Sensor CO2"
-  # humedad_suelo:
-  #   tipo: capacitivo
-  #   pin: A0
-  #   nombre: "Sensor Humedad Suelo"
-  #   arduino: true
+    tipo: CO2_PWM
+    pin: 17
+    nombre: "Sensor CO2 por PWM"
+
+# Puedes habilitar este sensor si más adelante usas humedad de suelo con Arduino
+# humedad_suelo:
+#   tipo: capacitivo
+#   pin: A0
+#   nombre: "Sensor Humedad Suelo"
+#   arduino: true
 
 actuadores:
   rele_board:

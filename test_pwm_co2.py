@@ -1,35 +1,50 @@
-import pigpio
+import RPi.GPIO as GPIO
 import time
 
-GPIO_PIN = 17  # PWM del MH-Z19D conectado a GPIO17 (pin físico 11)
+PWM_PIN = 17  # GPIO17 (pin físico 11)
 
-pi = pigpio.pi()
-if not pi.connected:
-    print("❌ No se pudo conectar a pigpio.")
-    exit()
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(PWM_PIN, GPIO.IN)
 
-def read_pwm():
-    print("📡 Leyendo señal PWM del sensor MH-Z19D...")
+def medir_pwm():
     try:
-        for i in range(10):  # Leer 10 muestras
-            pi.set_mode(GPIO_PIN, pigpio.INPUT)
-            pi.set_pull_up_down(GPIO_PIN, pigpio.PUD_OFF)
+        GPIO.wait_for_edge(PWM_PIN, GPIO.FALLING, timeout=5000)
+        start = time.time()
+        GPIO.wait_for_edge(PWM_PIN, GPIO.RISING, timeout=5000)
+        low_duration = time.time() - start
 
-            # Esperar flanco de bajada
-            pi.wait_for_edge(GPIO_PIN, pigpio.FALLING_EDGE)
-            start = pi.get_current_tick()
+        start = time.time()
+        GPIO.wait_for_edge(PWM_PIN, GPIO.FALLING, timeout=5000)
+        high_duration = time.time() - start
 
-            # Esperar flanco de subida
-            pi.wait_for_edge(GPIO_PIN, pigpio.RISING_EDGE)
-            duration = pigpio.tickDiff(start, pi.get_current_tick())  # duración en microsegundos
+        tl = low_duration * 1_000_000  # microsegundos
+        th = high_duration * 1_000_000
 
-            co2_ppm = (duration - 2000) * 5000 / 2000
-            co2_ppm = round(co2_ppm)
-            print(f"🌿 CO₂ estimado: {co2_ppm} ppm | Pulso: {duration} µs")
-            time.sleep(2)
-    except KeyboardInterrupt:
-        print("🛑 Interrumpido por el usuario")
-    finally:
-        pi.stop()
+        total = th + tl
+        if total == 0:
+            return None
 
-read_pwm()
+        # Fórmula oficial del datasheet
+        ppm = 5000 * (th - 2000) / (total - 4000)
+        return round(ppm, 2), int(th), int(tl)
+
+    except Exception as e:
+        print(f"⚠️ Error: {e}")
+        return None
+
+print("📡 Iniciando lectura por PWM del MH-Z19D...")
+try:
+    while True:
+        resultado = medir_pwm()
+        if resultado:
+            ppm, th, tl = resultado
+            print(f"🌿 CO₂ estimado: {ppm} ppm | Pulso ALTO: {th} µs | Pulso BAJO: {tl} µs")
+        else:
+            print("❌ No se pudo obtener lectura válida")
+        time.sleep(3)
+
+except KeyboardInterrupt:
+    print("\n🛑 Lectura interrumpida por el usuario.")
+finally:
+    GPIO.cleanup()
+

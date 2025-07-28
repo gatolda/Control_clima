@@ -1,10 +1,10 @@
 import Adafruit_DHT
-from Sensores.co2_pwm_sensor import CO2PWMSensor  # 👈 Importamos el nuevo sensor
+from Sensores.co2_pwm_sensor import CO2PWMSensor
 
 class SensorReader:
     def __init__(self, config):
         self.sensors = config.obtener("sensores")
-        self.co2_pwm = None  # Inicializamos el sensor
+        self.co2_pwm = None
         print(f"✅ SensorReader inicializado con sensores: {self.sensors.keys()}")
 
     def read_all_sensors(self):
@@ -12,6 +12,7 @@ class SensorReader:
         Lee todos los sensores configurados y devuelve un diccionario con los datos.
         """
         datos = {}
+
         for nombre, settings in self.sensors.items():
             tipo = settings.get("tipo")
             pin = settings.get("pin")
@@ -19,8 +20,8 @@ class SensorReader:
             if tipo == "DHT22":
                 humedad, temperatura = Adafruit_DHT.read_retry(Adafruit_DHT.DHT22, pin)
                 datos[nombre] = {
-                    "temperature": round(temperatura, 1) if temperatura else None,
-                    "humidity": round(humedad, 1) if humedad else None
+                    "temperature": round(temperatura, 1) if temperatura is not None else None,
+                    "humidity": round(humedad, 1) if humedad is not None else None
                 }
 
             elif tipo == "CO2_PWM":
@@ -29,14 +30,10 @@ class SensorReader:
                 lectura = self.co2_pwm.read()
                 if lectura:
                     datos[nombre] = {
-                        "co2": lectura["co2"],
-                        "pulse": lectura["pulse"]
+                        "co2": lectura["co2"]
                     }
                 else:
-                    datos[nombre] = {
-                        "co2": None,
-                        "pulse": None
-                    }
+                    datos[nombre] = {"co2": None}
 
             else:
                 datos[nombre] = {

@@ -19,12 +19,12 @@ def index():
     # 🔑 Enviar lista de actuadores (corrigido relay_pins.keys())
     return render_template("index.html", actuadores=actuator_manager.relay_pins.keys())
 
-@app.route("/sensores")
+@app.route("/api/lecturas")
 def get_sensores():
     datos = sensor_reader.read_all()
     return jsonify(datos)
 
-@app.route("/actuador/<nombre>/<accion>", methods=["POST"])
+@app.route("/api/actuadores/<nombre>/<accion>", methods=["POST"])
 def controlar_actuador(nombre, accion):
     if accion == "on":
         actuator_manager.turn_on(nombre)
@@ -36,7 +36,7 @@ def controlar_actuador(nombre, accion):
         estado = "comando desconocido"
     return jsonify({"actuador": nombre, "accion": accion, "estado": estado})
 
-@app.route("/actuadores/estado")
+@app.route("/api/actuadores/estado")
 def estado_actuadores():
     # 📢 Devuelve estados de los actuadores
     return jsonify(actuator_manager.status())

@@ -1,6 +1,6 @@
 async function actualizarSensores() {
     try {
-        const response = await fetch("/api/sensores");
+        const response = await fetch("/api/lecturas");
         const datos = await response.json();
 
         document.getElementById("temp").textContent = datos.temperatura_humedad.temperature || "--";
@@ -13,10 +13,8 @@ async function actualizarSensores() {
 
 async function toggleActuador(actuador, accion) {
     try {
-        await fetch(`/api/actuadores/${actuador}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ accion })
+        await fetch(`/api/actuadores/${actuador}/${accion}`, {
+            method: "POST"
         });
     } catch (error) {
         console.error("Error cambiando actuador:", error);

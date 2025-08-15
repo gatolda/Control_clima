@@ -33,10 +33,10 @@ class ManualMode:
                     self.mostrar_estado_sensores()
                 elif comando.startswith("on "):
                     dispositivo = comando[3:].strip()
-                    self.actuator_manager.activar(dispositivo)
+                    self.actuator_manager.turn_on(dispositivo)
                 elif comando.startswith("off "):
                     dispositivo = comando[4:].strip()
-                    self.actuator_manager.desactivar(dispositivo)
+                    self.actuator_manager.turn_off(dispositivo)
                 else:
                     print("❓ Comando no reconocido.")
                 self.mostrar_estado_sensores()

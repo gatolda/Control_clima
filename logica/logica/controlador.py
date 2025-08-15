@@ -1,6 +1,6 @@
 from logica.modos import ModeManager, Modo
 from logica.reglas_clima import ReglasClima
-from Actuadores.relay import RelayBoard
+from actuator_manager import ActuatorManager
 from Sensores.temp_humidity import TempHumiditySensor
 
 class ControladorClima:
@@ -8,7 +8,7 @@ class ControladorClima:
     Orquestador principal que gestiona sensores, actuadores y modos de operación.
     """
 
-    def __init__(self, sensor: TempHumiditySensor, actuador: RelayBoard, mode_manager: ModeManager):
+    def __init__(self, sensor: TempHumiditySensor, actuador: ActuatorManager, mode_manager: ModeManager):
         self.sensor = sensor
         self.actuador = actuador
         self.mode_manager = mode_manager

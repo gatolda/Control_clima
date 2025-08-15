@@ -28,7 +28,7 @@ class SensorReader:
                 if self.co2_pwm is None:
                     self.co2_pwm = CO2PWMSensor(pin)
                 lectura = self.co2_pwm.read()
-                if lectura:
+                if lectura is not None:
                     datos[nombre] = {
                         "co2": lectura["co2"]
                     }

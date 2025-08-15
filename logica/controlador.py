@@ -6,7 +6,7 @@ ejecutar acciones sobre los actuadores según el modo de operación.
 from logica.modos import ModeManager, Modo
 from logica.reglas_clima import ReglasClima
 # Ejemplo de integración con otros paquetes
-from Actuadores.relay import RelayBoard
+from actuator_manager import ActuatorManager
 from Sensores.temp_humidity import TempHumiditySensor
 
 
@@ -18,7 +18,7 @@ class ControladorClima:
     def __init__(
         self,
         sensor: TempHumiditySensor,
-        actuador: RelayBoard,
+        actuador: ActuatorManager,
         mode_manager: ModeManager,
     ):
         self.sensor = sensor

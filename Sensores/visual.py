@@ -48,13 +48,19 @@ class VisualClima:
 
     def toggle_ventilador(self):
         new_state = not self.vent_state.get()
-        self.logica.actuadores["ventilador"].activar(new_state)
+        if new_state:
+            self.logica.actuadores["ventilador"].turn_on()
+        else:
+            self.logica.actuadores["ventilador"].turn_off()
         self.vent_state.set(new_state)
         self.vent_button.config(text=f"Ventilador ({'On' if new_state else 'Off'})")
 
     def toggle_humidificador(self):
         new_state = not self.humid_state.get()
-        self.logica.actuadores["humidificador"].activar(new_state)
+        if new_state:
+            self.logica.actuadores["humidificador"].turn_on()
+        else:
+            self.logica.actuadores["humidificador"].turn_off()
         self.humid_state.set(new_state)
         self.humid_button.config(text=f"Humidificador ({'On' if new_state else 'Off'})")
 

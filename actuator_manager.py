@@ -39,6 +39,10 @@ class ActuatorManager:
         else:
             print(f"❌ Actuador '{nombre}' no encontrado.")
 
+    # Adaptadores para compatibilidad con nombres en español
+    activar = turn_on
+    desactivar = turn_off
+
     def status(self):
         print("📋 Estado de actuadores:")
         for nombre, activo in self.estado.items():

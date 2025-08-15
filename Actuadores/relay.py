@@ -45,6 +45,10 @@ class RelayBoard:
         GPIO.output(self.relay_pins[canal], GPIO.LOW)
         print(f"🔌 Relé {canal} desactivado (pin físico {self.relay_pins[canal]})")
 
+    # Adaptadores con nombres en inglés
+    turn_on = activar
+    turn_off = desactivar
+
     def apagar_todos(self):
         """Apaga todos los relés."""
         print("🔌 Apagando todos los relés...")

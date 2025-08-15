@@ -28,7 +28,7 @@ try:
     modo = input("Selecciona el modo (manual/automatico): ").strip().lower()
 
     if modo == "manual":
-        manual_mode = ManualMode(sensor_reader, actuator_manager)
+        manual_mode = ManualMode(actuator_manager, sensor_reader)
         manual_mode.run()
 
     elif modo == "automatico":

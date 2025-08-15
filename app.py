@@ -38,8 +38,13 @@ def controlar_actuador(nombre, accion):
 
 @app.route("/actuadores/estado")
 def estado_actuadores():
-    # 📢 Devuelve estados de los actuadores
-    return jsonify(actuator_manager.status())
+    # 📢 Devuelve y muestra estados de los actuadores
+    estados = actuator_manager.status()
+    print("📋 Estado de actuadores:")
+    for nombre, activo in estados.items():
+        estado_str = "ON" if activo else "OFF"
+        print(f"  - {nombre}: {estado_str}")
+    return jsonify(estados)
 
 @app.errorhandler(404)
 def not_found(error):

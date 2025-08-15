@@ -23,4 +23,4 @@ class CO2PWMSensor:
             return {"co2": co2_ppm}
         except Exception as e:
             print(f"⚠️ Error leyendo CO₂ por PWM: {e}")
-            return {"co2": None}
+            return None

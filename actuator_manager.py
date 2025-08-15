@@ -40,10 +40,8 @@ class ActuatorManager:
             print(f"❌ Actuador '{nombre}' no encontrado.")
 
     def status(self):
-        print("📋 Estado de actuadores:")
-        for nombre, activo in self.estado.items():
-            estado_str = "ON" if activo else "OFF"
-            print(f"  - {nombre}: {estado_str}")
+        """Retorna el estado actual de los actuadores."""
+        return self.estado
 
     def cleanup(self):
         print("♻️ Liberando GPIO...")

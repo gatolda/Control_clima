@@ -3,14 +3,18 @@ from flask import Flask, render_template, request, jsonify
 from config_loader import ConfigLoader
 from sensor_reader import SensorReader
 from actuator_manager import ActuatorManager
-from gpio_setup import setup_gpio, cleanup_gpio
+from gpio_setup import inicializar_gpio, limpiar_gpio
 
 app = Flask(__name__)
 
 # ✅ Inicializar configuración, sensores y actuadores
-setup_gpio()
 config = ConfigLoader()
 config.cargar_configuracion()
+
+# Configurar GPIO según el modo especificado en la configuración (por defecto BOARD)
+modo_gpio = config.obtener("general.modo_gpio", "BOARD")
+inicializar_gpio(modo_gpio)
+
 sensor_reader = SensorReader(config)
 actuator_manager = ActuatorManager(config)
 
@@ -49,4 +53,4 @@ if __name__ == "__main__":
     try:
         app.run(host="0.0.0.0", port=5000, debug=True)
     finally:
-        cleanup_gpio()
+        limpiar_gpio()

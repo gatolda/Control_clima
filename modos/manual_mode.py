@@ -1,9 +1,9 @@
 # modos/manual_mode.py
 
 class ManualMode:
-    def __init__(self, actuator_manager, sensor_reader):
-        self.actuator_manager = actuator_manager
+    def __init__(self, sensor_reader, actuator_manager):
         self.sensor_reader = sensor_reader
+        self.actuator_manager = actuator_manager
 
     def mostrar_estado_sensores(self):
         print("📊 Sensores:")

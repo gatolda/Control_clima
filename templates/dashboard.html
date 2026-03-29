@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Climatico - Invernadero</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Control Climatico - Invernadero</h1>
+        <div class="status-bar">
+            <span id="connection-status" class="status-dot disconnected"></span>
+            <span id="connection-text">Desconectado</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Seccion Sensores -->
+        <section class="section">
+            <h2>Sensores</h2>
+            <div class="sensors-grid">
+                <div class="sensor-card">
+                    <h3>Temperatura</h3>
+                    <div class="sensor-value">
+                        <span id="tempValue" class="big-value">--</span>
+                        <span class="unit">°C</span>
+                    </div>
+                    <div class="sensor-bar">
+                        <div class="bar-fill bar-temp" id="tempBar" style="width: 0%"></div>
+                    </div>
+                    <div class="sensor-range">0 — 50°C</div>
+                </div>
+                <div class="sensor-card">
+                    <h3>Humedad</h3>
+                    <div class="sensor-value">
+                        <span id="humValue" class="big-value">--</span>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="sensor-bar">
+                        <div class="bar-fill bar-hum" id="humBar" style="width: 0%"></div>
+                    </div>
+                    <div class="sensor-range">0 — 100%</div>
+                </div>
+                <div class="sensor-card">
+                    <h3>CO2</h3>
+                    <div class="sensor-value">
+                        <span id="co2Value" class="big-value">--</span>
+                        <span class="unit">ppm</span>
+                    </div>
+                    <div class="sensor-bar">
+                        <div class="bar-fill bar-co2" id="co2Bar" style="width: 0%"></div>
+                    </div>
+                    <div class="sensor-range">0 — 2000 ppm</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seccion Actuadores -->
+        <section class="section">
+            <h2>Actuadores</h2>
+            <div class="actuators-grid">
+                {% for nombre in actuadores %}
+                <div class="actuator-card" id="card-{{ nombre }}">
+                    <div class="actuator-icon" id="icon-{{ nombre }}"></div>
+                    <h3>{{ nombre.replace('_', ' ').title() }}</h3>
+                    <span class="actuator-state" id="state-{{ nombre }}">OFF</span>
+                    <div class="actuator-buttons">
+                        <button class="btn-on" onclick="toggleActuador('{{ nombre }}', 'on')">ON</button>
+                        <button class="btn-off" onclick="toggleActuador('{{ nombre }}', 'off')">OFF</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // --- Socket.IO ---
+        const socket = io();
+
+        socket.on('connect', function() {
+            document.getElementById('connection-status').className = 'status-dot connected';
+            document.getElementById('connection-text').textContent = 'Conectado';
+            console.log('Socket.IO conectado');
+        });
+
+        socket.on('disconnect', function() {
+            document.getElementById('connection-status').className = 'status-dot disconnected';
+            document.getElementById('connection-text').textContent = 'Desconectado';
+        });
+
+        // --- Actualizar sensores ---
+        function updateSensors(data) {
+            if (data.temperatura_humedad) {
+                const temp = data.temperatura_humedad.temperature;
+                const hum = data.temperatura_humedad.humidity;
+                if (temp !== null && temp !== undefined && temp > -40 && temp < 80) {
+                    document.getElementById('tempValue').textContent = temp.toFixed(1);
+                    const pct = Math.min(100, Math.max(0, (temp / 50) * 100));
+                    document.getElementById('tempBar').style.width = pct + '%';
+                    // Color segun rango
+                    const bar = document.getElementById('tempBar');
+                    if (temp < 15) bar.className = 'bar-fill bar-cold';
+                    else if (temp <= 26) bar.className = 'bar-fill bar-good';
+                    else bar.className = 'bar-fill bar-hot';
+                }
+                if (hum !== null && hum !== undefined && hum >= 0 && hum <= 100) {
+                    document.getElementById('humValue').textContent = hum.toFixed(1);
+                    document.getElementById('humBar').style.width = hum + '%';
+                    const bar = document.getElementById('humBar');
+                    if (hum < 50) bar.className = 'bar-fill bar-cold';
+                    else if (hum <= 70) bar.className = 'bar-fill bar-good';
+                    else bar.className = 'bar-fill bar-hot';
+                }
+            }
+            if (data.co2) {
+                const co2 = data.co2.co2;
+                if (co2 !== null && co2 !== undefined && co2 >= 0 && co2 <= 5000) {
+                    document.getElementById('co2Value').textContent = Math.round(co2);
+                    const pct = Math.min(100, Math.max(0, (co2 / 2000) * 100));
+                    document.getElementById('co2Bar').style.width = pct + '%';
+                    const bar = document.getElementById('co2Bar');
+                    if (co2 <= 800) bar.className = 'bar-fill bar-good';
+                    else if (co2 <= 1200) bar.className = 'bar-fill bar-warn';
+                    else bar.className = 'bar-fill bar-hot';
+                }
+            }
+        }
+
+        // Recibir via Socket.IO
+        socket.on('sensor_data', function(data) {
+            console.log('sensor_data recibido:', data);
+            updateSensors(data);
+        });
+
+        // Fallback: polling HTTP cada 5 segundos
+        setInterval(function() {
+            fetch('/sensores')
+                .then(r => r.json())
+                .then(data => updateSensors(data))
+                .catch(e => console.log('Error polling sensores:', e));
+        }, 5000);
+
+        // --- Recibir estado de actuadores ---
+        socket.on('actuator_status', function(estados) {
+            for (const [nombre, activo] of Object.entries(estados)) {
+                const card = document.getElementById('card-' + nombre);
+                const state = document.getElementById('state-' + nombre);
+                if (card) {
+                    if (activo) {
+                        card.classList.add('active');
+                        state.textContent = 'ON';
+                    } else {
+                        card.classList.remove('active');
+                        state.textContent = 'OFF';
+                    }
+                }
+            }
+        });
+
+        // --- Enviar comando a actuador ---
+        function toggleActuador(nombre, accion) {
+            socket.emit('toggle_actuador', { nombre: nombre, accion: accion });
+        }
+
+        // Cargar datos iniciales via HTTP
+        fetch('/sensores').then(r => r.json()).then(data => updateSensors(data)).catch(() => {});
+        fetch('/actuadores/estado').then(r => r.json()).then(data => {
+            if (data) {
+                for (const [nombre, activo] of Object.entries(data)) {
+                    const card = document.getElementById('card-' + nombre);
+                    const state = document.getElementById('state-' + nombre);
+                    if (card && activo) {
+                        card.classList.add('active');
+                        state.textContent = 'ON';
+                    }
+                }
+            }
+        }).catch(() => {});
+    </script>
+</body>
+</html>

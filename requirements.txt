@@ -1,19 +1,4 @@
-# Core Raspberry Pi libraries
 RPi.GPIO
 Adafruit_DHT
-
-# Web server
 Flask
-
-# GUI libraries
-streamlit
-customtkinter
-
-# Data visualization
-matplotlib
-
-# Optional: SQLite for data logging
-sqlalchemy
-
-# Utility
-requests
+flask-socketio

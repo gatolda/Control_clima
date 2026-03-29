@@ -2,134 +2,187 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>🌱 Control Climático Futurista</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Climatico - Invernadero</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/@bernii/gauge.js/dist/gauge.min.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <style>
-        body {
-            background: linear-gradient(to right, #2c5364, #203a43, #0f2027);
-            color: #fff;
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 0;
-        }
-        h1 {
-            margin-top: 20px;
-            font-size: 2rem;
-        }
-        .gauges-container {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin: 20px;
-            gap: 20px;
-        }
-        .gauge {
-            width: 200px;
-            height: 200px;
-        }
-        .controls {
-            margin-top: 20px;
-        }
-        button {
-            background-color: #00b894;
-            border: none;
-            padding: 10px 15px;
-            font-size: 16px;
-            color: #fff;
-            border-radius: 8px;
-            margin: 5px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        button:hover {
-            background-color: #098b72;
-        }
-    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body>
-    <h1>🌱 Panel de Control Climático</h1>
+    <header>
+        <h1>Control Climatico - Invernadero</h1>
+        <div class="status-bar">
+            <span id="connection-status" class="status-dot disconnected"></span>
+            <span id="connection-text">Desconectado</span>
+        </div>
+    </header>
 
-    <div class="gauges-container">
-        <canvas id="tempGauge" class="gauge"></canvas>
-        <canvas id="humGauge" class="gauge"></canvas>
-        <canvas id="co2Gauge" class="gauge"></canvas>
-    </div>
+    <main>
+        <!-- Seccion Sensores -->
+        <section class="section">
+            <h2>Sensores</h2>
+            <div class="sensors-grid">
+                <div class="sensor-card">
+                    <h3>Temperatura</h3>
+                    <canvas id="tempGauge"></canvas>
+                    <div class="sensor-value">
+                        <span id="tempValue">--</span>
+                        <span class="unit">C</span>
+                    </div>
+                </div>
+                <div class="sensor-card">
+                    <h3>Humedad</h3>
+                    <canvas id="humGauge"></canvas>
+                    <div class="sensor-value">
+                        <span id="humValue">--</span>
+                        <span class="unit">%</span>
+                    </div>
+                </div>
+                <div class="sensor-card">
+                    <h3>CO2</h3>
+                    <canvas id="co2Gauge"></canvas>
+                    <div class="sensor-value">
+                        <span id="co2Value">--</span>
+                        <span class="unit">ppm</span>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-    <div class="controls">
-        {% for nombre in actuadores %}
-        <button onclick="controlActuador('{{nombre}}', 'on')">Encender {{nombre}}</button>
-        <button onclick="controlActuador('{{nombre}}', 'off')">Apagar {{nombre}}</button>
-        {% endfor %}
-    </div>
+        <!-- Seccion Actuadores -->
+        <section class="section">
+            <h2>Actuadores</h2>
+            <div class="actuators-grid">
+                {% for nombre in actuadores %}
+                <div class="actuator-card" id="card-{{ nombre }}">
+                    <div class="actuator-icon" id="icon-{{ nombre }}"></div>
+                    <h3>{{ nombre.replace('_', ' ').title() }}</h3>
+                    <span class="actuator-state" id="state-{{ nombre }}">OFF</span>
+                    <div class="actuator-buttons">
+                        <button class="btn-on" onclick="toggleActuador('{{ nombre }}', 'on')">ON</button>
+                        <button class="btn-off" onclick="toggleActuador('{{ nombre }}', 'off')">OFF</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
 
     <script>
-        // Gauge inicialización
-        const tempGauge = new Gauge(document.getElementById("tempGauge")).setOptions({
-            angle: 0,
-            lineWidth: 0.2,
-            pointer: { length: 0.6, color: "#ff4757" },
-            staticZones: [
-                {strokeStyle: "#00e676", min: 0, max: 20},
-                {strokeStyle: "#ffeb3b", min: 20, max: 26},
-                {strokeStyle: "#ff3d00", min: 26, max: 40}
-            ],
-            staticLabels: { font: "12px sans-serif", labels: [0, 10, 20, 30, 40], color: "#fff" }
+        // --- Socket.IO ---
+        const socket = io();
+
+        socket.on('connect', function() {
+            document.getElementById('connection-status').className = 'status-dot connected';
+            document.getElementById('connection-text').textContent = 'Conectado';
         });
-        tempGauge.maxValue = 40;
+
+        socket.on('disconnect', function() {
+            document.getElementById('connection-status').className = 'status-dot disconnected';
+            document.getElementById('connection-text').textContent = 'Desconectado';
+        });
+
+        // --- Gauges ---
+        const gaugeOpts = {
+            angle: 0.15,
+            lineWidth: 0.3,
+            radiusScale: 0.9,
+            pointer: { length: 0.5, strokeWidth: 0.035, color: '#ffffff' },
+            limitMax: true,
+            limitMin: true,
+            highDpiSupport: true,
+            renderTicks: { divisions: 5, divWidth: 1, divLength: 0.5, divColor: '#666' }
+        };
+
+        const tempGauge = new Gauge(document.getElementById('tempGauge')).setOptions({
+            ...gaugeOpts,
+            staticZones: [
+                {strokeStyle: '#3498db', min: 0, max: 15},
+                {strokeStyle: '#2ecc71', min: 15, max: 20},
+                {strokeStyle: '#27ae60', min: 20, max: 26},
+                {strokeStyle: '#f39c12', min: 26, max: 32},
+                {strokeStyle: '#e74c3c', min: 32, max: 50}
+            ],
+            staticLabels: { font: '11px sans-serif', labels: [0, 10, 20, 30, 40, 50], color: '#aaa' }
+        });
+        tempGauge.maxValue = 50;
+        tempGauge.setMinValue(0);
+        tempGauge.animationSpeed = 20;
         tempGauge.set(0);
 
-        const humGauge = new Gauge(document.getElementById("humGauge")).setOptions({
-            angle: 0,
-            lineWidth: 0.2,
-            pointer: { length: 0.6, color: "#1e90ff" },
+        const humGauge = new Gauge(document.getElementById('humGauge')).setOptions({
+            ...gaugeOpts,
             staticZones: [
-                {strokeStyle: "#00e676", min: 0, max: 50},
-                {strokeStyle: "#ffeb3b", min: 50, max: 70},
-                {strokeStyle: "#ff3d00", min: 70, max: 100}
+                {strokeStyle: '#e74c3c', min: 0, max: 30},
+                {strokeStyle: '#f39c12', min: 30, max: 50},
+                {strokeStyle: '#27ae60', min: 50, max: 70},
+                {strokeStyle: '#f39c12', min: 70, max: 85},
+                {strokeStyle: '#e74c3c', min: 85, max: 100}
             ],
-            staticLabels: { font: "12px sans-serif", labels: [0, 25, 50, 75, 100], color: "#fff" }
+            staticLabels: { font: '11px sans-serif', labels: [0, 25, 50, 75, 100], color: '#aaa' }
         });
         humGauge.maxValue = 100;
+        humGauge.setMinValue(0);
+        humGauge.animationSpeed = 20;
         humGauge.set(0);
 
-        const co2Gauge = new Gauge(document.getElementById("co2Gauge")).setOptions({
-            angle: 0,
-            lineWidth: 0.2,
-            pointer: { length: 0.6, color: "#fd7e14" },
+        const co2Gauge = new Gauge(document.getElementById('co2Gauge')).setOptions({
+            ...gaugeOpts,
             staticZones: [
-                {strokeStyle: "#00e676", min: 0, max: 800},
-                {strokeStyle: "#ffeb3b", min: 800, max: 1200},
-                {strokeStyle: "#ff3d00", min: 1200, max: 2000}
+                {strokeStyle: '#27ae60', min: 0, max: 800},
+                {strokeStyle: '#f39c12', min: 800, max: 1200},
+                {strokeStyle: '#e74c3c', min: 1200, max: 2000}
             ],
-            staticLabels: { font: "12px sans-serif", labels: [0, 400, 800, 1200, 2000], color: "#fff" }
+            staticLabels: { font: '11px sans-serif', labels: [0, 400, 800, 1200, 2000], color: '#aaa' }
         });
         co2Gauge.maxValue = 2000;
+        co2Gauge.setMinValue(0);
+        co2Gauge.animationSpeed = 20;
         co2Gauge.set(0);
 
-        function actualizarGauges() {
-            fetch("/api/lecturas")
-                .then(res => res.json())
-                .then(data => {
-                    tempGauge.set(data.temperatura_humedad.temperature || 0);
-                    humGauge.set(data.temperatura_humedad.humidity || 0);
-                    co2Gauge.set(data.co2.co2 || 0);
-                })
-                .catch(() => {
-                    // Datos de prueba si falla la API
-                    tempGauge.set(Math.random() * 40);
-                    humGauge.set(Math.random() * 100);
-                    co2Gauge.set(Math.random() * 2000);
-                });
-        }
+        // --- Recibir datos de sensores ---
+        socket.on('sensor_data', function(data) {
+            if (data.temperatura_humedad) {
+                const temp = data.temperatura_humedad.temperature;
+                const hum = data.temperatura_humedad.humidity;
+                if (temp !== null && temp !== undefined) {
+                    tempGauge.set(temp);
+                    document.getElementById('tempValue').textContent = temp.toFixed(1);
+                }
+                if (hum !== null && hum !== undefined) {
+                    humGauge.set(hum);
+                    document.getElementById('humValue').textContent = hum.toFixed(1);
+                }
+            }
+            if (data.co2) {
+                const co2val = data.co2.co2;
+                if (co2val !== null && co2val !== undefined) {
+                    co2Gauge.set(co2val);
+                    document.getElementById('co2Value').textContent = Math.round(co2val);
+                }
+            }
+        });
 
-        setInterval(actualizarGauges, 2000);
+        // --- Recibir estado de actuadores ---
+        socket.on('actuator_status', function(estados) {
+            for (const [nombre, activo] of Object.entries(estados)) {
+                const card = document.getElementById('card-' + nombre);
+                const state = document.getElementById('state-' + nombre);
+                if (card) {
+                    if (activo) {
+                        card.classList.add('active');
+                        state.textContent = 'ON';
+                    } else {
+                        card.classList.remove('active');
+                        state.textContent = 'OFF';
+                    }
+                }
+            }
+        });
 
-        function controlActuador(actuador, accion) {
-            fetch(`/api/actuadores/${actuador}/${accion}`, { method: "POST" })
-                .then(() => alert(`${accion.toUpperCase()} ${actuador}`))
-                .catch(() => alert("⚠️ Error al enviar comando"));
+        // --- Enviar comando a actuador ---
+        function toggleActuador(nombre, accion) {
+            socket.emit('toggle_actuador', { nombre: nombre, accion: accion });
         }
     </script>
 </body>

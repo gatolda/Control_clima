@@ -79,6 +79,12 @@ def get_thresholds():
     thresholds = db.get_stage_thresholds(stage)
     return jsonify({"stage": stage, "thresholds": thresholds})
 
+@app.route("/api/sensor-health")
+def sensor_health():
+    health = sensor_reader.get_sensor_health()
+    detailed = sensor_reader.read_all_detailed()
+    return jsonify({"health": health, "readings": detailed})
+
 # --- Socket.IO Events ---
 
 @socketio.on("connect")
@@ -98,11 +104,17 @@ def handle_toggle(data):
     nombre = data.get("nombre")
     accion = data.get("accion")
     if accion == "on":
-        actuator_manager.turn_on(nombre)
+        result = actuator_manager.turn_on(nombre)
     elif accion == "off":
-        actuator_manager.turn_off(nombre)
-    # Registrar evento en base de datos
-    db.log_actuator_event(nombre, accion, triggered_by="manual")
+        result = actuator_manager.turn_off(nombre)
+    else:
+        result = {"ok": False, "error": "Accion desconocida"}
+
+    if result.get("ok"):
+        db.log_actuator_event(nombre, accion, triggered_by="manual")
+    else:
+        emit("alert", {"type": "conflict", "message": result.get("error", "")})
+
     socketio.emit("actuator_status", actuator_manager.status())
 
 # --- Background thread para lecturas de sensores ---

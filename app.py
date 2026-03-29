@@ -10,7 +10,7 @@ import time
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "invernadero-secret"
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Inicializar configuracion, sensores y actuadores
 inicializar_gpio()
@@ -18,6 +18,10 @@ config = ConfigLoader()
 config.cargar_configuracion()
 sensor_reader = SensorReader(config)
 actuator_manager = ActuatorManager(config)
+
+# Ultima lectura de sensores (compartida entre threads)
+latest_sensor_data = {}
+sensor_lock = threading.Lock()
 
 # --- Rutas HTTP ---
 
@@ -28,8 +32,8 @@ def index():
 
 @app.route("/sensores")
 def get_sensores():
-    datos = sensor_reader.read_all()
-    return jsonify(datos)
+    with sensor_lock:
+        return jsonify(latest_sensor_data)
 
 @app.route("/actuadores/estado")
 def estado_actuadores():
@@ -40,14 +44,10 @@ def estado_actuadores():
 @socketio.on("connect")
 def handle_connect():
     print("Cliente conectado")
-    # Enviar estado actual de actuadores al conectar
     emit("actuator_status", actuator_manager.status())
-    # Enviar lectura inicial de sensores
-    try:
-        datos = sensor_reader.read_all()
-        emit("sensor_data", datos)
-    except Exception as e:
-        print(f"Error leyendo sensores: {e}")
+    with sensor_lock:
+        if latest_sensor_data:
+            emit("sensor_data", latest_sensor_data)
 
 @socketio.on("disconnect")
 def handle_disconnect():
@@ -61,19 +61,23 @@ def handle_toggle(data):
         actuator_manager.turn_on(nombre)
     elif accion == "off":
         actuator_manager.turn_off(nombre)
-    # Emitir estado actualizado a TODOS los clientes
     socketio.emit("actuator_status", actuator_manager.status())
 
 # --- Background thread para lecturas de sensores ---
 
 def sensor_background_thread():
+    global latest_sensor_data
+    print("Background thread de sensores iniciado")
     while True:
-        time.sleep(5)
         try:
             datos = sensor_reader.read_all()
+            with sensor_lock:
+                latest_sensor_data = datos
+            print(f"Sensores: temp={datos.get('temperatura_humedad', {}).get('temperature')}, hum={datos.get('temperatura_humedad', {}).get('humidity')}, co2={datos.get('co2', {}).get('co2')}", flush=True)
             socketio.emit("sensor_data", datos)
         except Exception as e:
-            print(f"Error en lectura de sensores: {e}")
+            print(f"Error en lectura de sensores: {e}", flush=True)
+        time.sleep(5)
 
 @app.errorhandler(404)
 def not_found(error):

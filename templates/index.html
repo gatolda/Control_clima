@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control Climatico - Invernadero</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/@bernii/gauge.js/dist/gauge.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body>
@@ -24,27 +23,36 @@
             <div class="sensors-grid">
                 <div class="sensor-card">
                     <h3>Temperatura</h3>
-                    <canvas id="tempGauge"></canvas>
                     <div class="sensor-value">
-                        <span id="tempValue">--</span>
-                        <span class="unit">C</span>
+                        <span id="tempValue" class="big-value">--</span>
+                        <span class="unit">°C</span>
                     </div>
+                    <div class="sensor-bar">
+                        <div class="bar-fill bar-temp" id="tempBar" style="width: 0%"></div>
+                    </div>
+                    <div class="sensor-range">0 — 50°C</div>
                 </div>
                 <div class="sensor-card">
                     <h3>Humedad</h3>
-                    <canvas id="humGauge"></canvas>
                     <div class="sensor-value">
-                        <span id="humValue">--</span>
+                        <span id="humValue" class="big-value">--</span>
                         <span class="unit">%</span>
                     </div>
+                    <div class="sensor-bar">
+                        <div class="bar-fill bar-hum" id="humBar" style="width: 0%"></div>
+                    </div>
+                    <div class="sensor-range">0 — 100%</div>
                 </div>
                 <div class="sensor-card">
                     <h3>CO2</h3>
-                    <canvas id="co2Gauge"></canvas>
                     <div class="sensor-value">
-                        <span id="co2Value">--</span>
+                        <span id="co2Value" class="big-value">--</span>
                         <span class="unit">ppm</span>
                     </div>
+                    <div class="sensor-bar">
+                        <div class="bar-fill bar-co2" id="co2Bar" style="width: 0%"></div>
+                    </div>
+                    <div class="sensor-range">0 — 2000 ppm</div>
                 </div>
             </div>
         </section>
@@ -75,6 +83,7 @@
         socket.on('connect', function() {
             document.getElementById('connection-status').className = 'status-dot connected';
             document.getElementById('connection-text').textContent = 'Conectado';
+            console.log('Socket.IO conectado');
         });
 
         socket.on('disconnect', function() {
@@ -82,86 +91,57 @@
             document.getElementById('connection-text').textContent = 'Desconectado';
         });
 
-        // --- Gauges ---
-        const gaugeOpts = {
-            angle: 0.15,
-            lineWidth: 0.3,
-            radiusScale: 0.9,
-            pointer: { length: 0.5, strokeWidth: 0.035, color: '#ffffff' },
-            limitMax: true,
-            limitMin: true,
-            highDpiSupport: true,
-            renderTicks: { divisions: 5, divWidth: 1, divLength: 0.5, divColor: '#666' }
-        };
-
-        const tempGauge = new Gauge(document.getElementById('tempGauge')).setOptions({
-            ...gaugeOpts,
-            staticZones: [
-                {strokeStyle: '#3498db', min: 0, max: 15},
-                {strokeStyle: '#2ecc71', min: 15, max: 20},
-                {strokeStyle: '#27ae60', min: 20, max: 26},
-                {strokeStyle: '#f39c12', min: 26, max: 32},
-                {strokeStyle: '#e74c3c', min: 32, max: 50}
-            ],
-            staticLabels: { font: '11px sans-serif', labels: [0, 10, 20, 30, 40, 50], color: '#aaa' }
-        });
-        tempGauge.maxValue = 50;
-        tempGauge.setMinValue(0);
-        tempGauge.animationSpeed = 20;
-        tempGauge.set(0);
-
-        const humGauge = new Gauge(document.getElementById('humGauge')).setOptions({
-            ...gaugeOpts,
-            staticZones: [
-                {strokeStyle: '#e74c3c', min: 0, max: 30},
-                {strokeStyle: '#f39c12', min: 30, max: 50},
-                {strokeStyle: '#27ae60', min: 50, max: 70},
-                {strokeStyle: '#f39c12', min: 70, max: 85},
-                {strokeStyle: '#e74c3c', min: 85, max: 100}
-            ],
-            staticLabels: { font: '11px sans-serif', labels: [0, 25, 50, 75, 100], color: '#aaa' }
-        });
-        humGauge.maxValue = 100;
-        humGauge.setMinValue(0);
-        humGauge.animationSpeed = 20;
-        humGauge.set(0);
-
-        const co2Gauge = new Gauge(document.getElementById('co2Gauge')).setOptions({
-            ...gaugeOpts,
-            staticZones: [
-                {strokeStyle: '#27ae60', min: 0, max: 800},
-                {strokeStyle: '#f39c12', min: 800, max: 1200},
-                {strokeStyle: '#e74c3c', min: 1200, max: 2000}
-            ],
-            staticLabels: { font: '11px sans-serif', labels: [0, 400, 800, 1200, 2000], color: '#aaa' }
-        });
-        co2Gauge.maxValue = 2000;
-        co2Gauge.setMinValue(0);
-        co2Gauge.animationSpeed = 20;
-        co2Gauge.set(0);
-
-        // --- Recibir datos de sensores ---
-        socket.on('sensor_data', function(data) {
+        // --- Actualizar sensores ---
+        function updateSensors(data) {
             if (data.temperatura_humedad) {
                 const temp = data.temperatura_humedad.temperature;
                 const hum = data.temperatura_humedad.humidity;
-                if (temp !== null && temp !== undefined) {
-                    tempGauge.set(temp);
+                if (temp !== null && temp !== undefined && temp > -40 && temp < 80) {
                     document.getElementById('tempValue').textContent = temp.toFixed(1);
+                    const pct = Math.min(100, Math.max(0, (temp / 50) * 100));
+                    document.getElementById('tempBar').style.width = pct + '%';
+                    // Color segun rango
+                    const bar = document.getElementById('tempBar');
+                    if (temp < 15) bar.className = 'bar-fill bar-cold';
+                    else if (temp <= 26) bar.className = 'bar-fill bar-good';
+                    else bar.className = 'bar-fill bar-hot';
                 }
-                if (hum !== null && hum !== undefined) {
-                    humGauge.set(hum);
+                if (hum !== null && hum !== undefined && hum >= 0 && hum <= 100) {
                     document.getElementById('humValue').textContent = hum.toFixed(1);
+                    document.getElementById('humBar').style.width = hum + '%';
+                    const bar = document.getElementById('humBar');
+                    if (hum < 50) bar.className = 'bar-fill bar-cold';
+                    else if (hum <= 70) bar.className = 'bar-fill bar-good';
+                    else bar.className = 'bar-fill bar-hot';
                 }
             }
             if (data.co2) {
-                const co2val = data.co2.co2;
-                if (co2val !== null && co2val !== undefined) {
-                    co2Gauge.set(co2val);
-                    document.getElementById('co2Value').textContent = Math.round(co2val);
+                const co2 = data.co2.co2;
+                if (co2 !== null && co2 !== undefined && co2 >= 0 && co2 <= 5000) {
+                    document.getElementById('co2Value').textContent = Math.round(co2);
+                    const pct = Math.min(100, Math.max(0, (co2 / 2000) * 100));
+                    document.getElementById('co2Bar').style.width = pct + '%';
+                    const bar = document.getElementById('co2Bar');
+                    if (co2 <= 800) bar.className = 'bar-fill bar-good';
+                    else if (co2 <= 1200) bar.className = 'bar-fill bar-warn';
+                    else bar.className = 'bar-fill bar-hot';
                 }
             }
+        }
+
+        // Recibir via Socket.IO
+        socket.on('sensor_data', function(data) {
+            console.log('sensor_data recibido:', data);
+            updateSensors(data);
         });
+
+        // Fallback: polling HTTP cada 5 segundos
+        setInterval(function() {
+            fetch('/sensores')
+                .then(r => r.json())
+                .then(data => updateSensors(data))
+                .catch(e => console.log('Error polling sensores:', e));
+        }, 5000);
 
         // --- Recibir estado de actuadores ---
         socket.on('actuator_status', function(estados) {
@@ -184,6 +164,21 @@
         function toggleActuador(nombre, accion) {
             socket.emit('toggle_actuador', { nombre: nombre, accion: accion });
         }
+
+        // Cargar datos iniciales via HTTP
+        fetch('/sensores').then(r => r.json()).then(data => updateSensors(data)).catch(() => {});
+        fetch('/actuadores/estado').then(r => r.json()).then(data => {
+            if (data) {
+                for (const [nombre, activo] of Object.entries(data)) {
+                    const card = document.getElementById('card-' + nombre);
+                    const state = document.getElementById('state-' + nombre);
+                    if (card && activo) {
+                        card.classList.add('active');
+                        state.textContent = 'ON';
+                    }
+                }
+            }
+        }).catch(() => {});
     </script>
 </body>
 </html>

@@ -5,7 +5,7 @@ class CO2PWMSensor:
     def __init__(self, pin):
         self.pin = pin
         GPIO.setup(self.pin, GPIO.IN)
-        print(f"🌿 Sensor PWM CO₂ inicializado en pin físico {self.pin} (BOARD)")
+        print(f"Sensor PWM CO2 inicializado en pin fisico {self.pin} (BOARD)")
 
     def read(self):
         try:
@@ -15,12 +15,16 @@ class CO2PWMSensor:
             GPIO.wait_for_edge(self.pin, GPIO.FALLING, timeout=5000)
             end = time.time()
 
-            pulse_duration = (end - start) * 1_000_000  # en microsegundos
+            pulse_duration_us = (end - start) * 1_000_000
 
-            # Fórmula de conversión PWM (según datasheet MH-Z19D)
-            co2_ppm = int((pulse_duration - 2000) * 5000 / 1000)
+            # Formula MH-Z19D: CO2 = 5000 * (TH_ms - 2) / 1000
+            # TH_ms = pulse_duration_us / 1000
+            co2_ppm = int((pulse_duration_us - 2000) * 5000 / 1_000_000)
+
+            if co2_ppm < 0:
+                co2_ppm = 0
 
             return {"co2": co2_ppm}
         except Exception as e:
-            print(f"⚠️ Error leyendo CO₂ por PWM: {e}")
+            print(f"Error leyendo CO2 por PWM: {e}")
             return {"co2": None}

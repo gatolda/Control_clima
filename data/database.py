@@ -140,6 +140,114 @@ class Database:
         except (ValueError, ZeroDivisionError):
             return None
 
+    # --- Lecturas de suelo ---
+
+    def save_soil_reading(self, zone_id, sensor_id, variable, value):
+        """Guarda una lectura de sensor de suelo."""
+        if value is None:
+            return
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO soil_readings (zone_id, sensor_id, variable, value) VALUES (?, ?, ?, ?)",
+            (zone_id, sensor_id, variable, value)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_soil_readings(self, zone_id=None, hours=24):
+        """Obtiene lecturas de suelo."""
+        conn = self._get_conn()
+        if zone_id:
+            rows = conn.execute(
+                """SELECT timestamp, zone_id, sensor_id, variable, value
+                   FROM soil_readings
+                   WHERE zone_id = ? AND timestamp >= datetime('now', 'localtime', ?)
+                   ORDER BY timestamp ASC""",
+                (zone_id, f"-{hours} hours")
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT timestamp, zone_id, sensor_id, variable, value
+                   FROM soil_readings
+                   WHERE timestamp >= datetime('now', 'localtime', ?)
+                   ORDER BY timestamp ASC""",
+                (f"-{hours} hours",)
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_latest_soil_reading(self, zone_id, variable="humedad_suelo"):
+        """Obtiene la lectura de suelo mas reciente para una zona."""
+        conn = self._get_conn()
+        row = conn.execute(
+            """SELECT value FROM soil_readings
+               WHERE zone_id = ? AND variable = ?
+               ORDER BY id DESC LIMIT 1""",
+            (zone_id, variable)
+        ).fetchone()
+        conn.close()
+        return row["value"] if row else None
+
+    # --- Eventos de riego ---
+
+    def log_irrigation_event(self, zone_id, action, duration_seconds=None,
+                             soil_humidity=None, soil_ph=None, reason=None,
+                             triggered_by="scheduler"):
+        """Registra un evento de riego."""
+        conn = self._get_conn()
+        conn.execute(
+            """INSERT INTO irrigation_events
+               (zone_id, action, duration_seconds, soil_humidity, soil_ph, reason, triggered_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (zone_id, action, duration_seconds, soil_humidity, soil_ph, reason, triggered_by)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_irrigation_events(self, zone_id=None, hours=24):
+        """Obtiene eventos de riego."""
+        conn = self._get_conn()
+        if zone_id:
+            rows = conn.execute(
+                """SELECT * FROM irrigation_events
+                   WHERE zone_id = ? AND timestamp >= datetime('now', 'localtime', ?)
+                   ORDER BY timestamp DESC""",
+                (zone_id, f"-{hours} hours")
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT * FROM irrigation_events
+                   WHERE timestamp >= datetime('now', 'localtime', ?)
+                   ORDER BY timestamp DESC""",
+                (f"-{hours} hours",)
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # --- Eventos de camara ---
+
+    def save_camera_event(self, filename, analysis=None):
+        """Guarda un evento de captura de camara."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO camera_events (filename, analysis) VALUES (?, ?)",
+            (filename, analysis)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_camera_events(self, limit=20):
+        """Obtiene eventos de camara recientes."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM camera_events ORDER BY id DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # --- Limpieza ---
+
     def cleanup_old_data(self, days=30):
         """Elimina datos mas antiguos que N dias."""
         conn = self._get_conn()
@@ -149,6 +257,14 @@ class Database:
         )
         conn.execute(
             "DELETE FROM actuator_events WHERE timestamp < datetime('now', 'localtime', ?)",
+            (f"-{days} days",)
+        )
+        conn.execute(
+            "DELETE FROM soil_readings WHERE timestamp < datetime('now', 'localtime', ?)",
+            (f"-{days} days",)
+        )
+        conn.execute(
+            "DELETE FROM irrigation_events WHERE timestamp < datetime('now', 'localtime', ?)",
             (f"-{days} days",)
         )
         conn.commit()

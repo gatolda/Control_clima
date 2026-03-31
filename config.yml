@@ -26,12 +26,36 @@ sensores:
       pin: 11
       ubicacion: "centro"
 
-  # Futuro: Arduino para humedad de suelo
+  # Sensores de suelo via Arduino (habilitar cuando haya hardware)
   # humedad_suelo:
-  #   - id: "arduino_suelo_1"
+  #   - id: "suelo_h_1"
   #     tipo: ARDUINO_SERIAL
   #     puerto: "/dev/ttyUSB0"
-  #     plantas: 15
+  #     zona: "zona_1"
+  #   - id: "suelo_h_2"
+  #     tipo: ARDUINO_SERIAL
+  #     puerto: "/dev/ttyUSB0"
+  #     zona: "zona_1"
+  #   - id: "suelo_h_3"
+  #     tipo: ARDUINO_SERIAL
+  #     puerto: "/dev/ttyUSB0"
+  #     zona: "zona_2"
+  #
+  # ph_suelo:
+  #   - id: "suelo_ph_1"
+  #     tipo: ARDUINO_SERIAL
+  #     puerto: "/dev/ttyUSB0"
+  #     zona: "zona_1"
+  #   - id: "suelo_ph_2"
+  #     tipo: ARDUINO_SERIAL
+  #     puerto: "/dev/ttyUSB0"
+  #     zona: "zona_2"
+
+# Arduino hub (habilitar cuando haya hardware)
+# arduino:
+#   puerto: "/dev/ttyUSB0"
+#   baudrate: 115200
+#   timeout: 2
 
 # Actuadores
 actuadores:
@@ -73,6 +97,40 @@ escalamiento:
   co2_alto:
     - ventiladores
     - intractor
+
+# Sistema de riego (habilitar cuando haya hardware)
+riego:
+  habilitado: false
+  zonas: []
+  # Ejemplo de zona configurada:
+  # zonas:
+  #   - id: "zona_1"
+  #     nombre: "Mesa Norte"
+  #     valvula: "valvula_zona_1"     # nombre en actuadores.pines
+  #     plantas: [1, 2, 3, 4, 5]
+  #     sensor_humedad: "suelo_h_1"
+  #     sensores_humedad: ["suelo_h_1", "suelo_h_2"]
+  #     sensor_ph: "suelo_ph_1"
+  #     programacion:
+  #       - hora: "08:00"
+  #         duracion_minutos: 5
+  #       - hora: "14:00"
+  #         duracion_minutos: 3
+  #       - hora: "20:00"
+  #         duracion_minutos: 5
+  #     umbrales:
+  #       humedad_minima: 40
+  #       humedad_skip: 65
+  #       ph_min: 5.5
+  #       ph_max: 7.0
+  #       duracion_maxima_minutos: 15
+
+# Camara (habilitar cuando haya hardware)
+camara:
+  habilitada: false
+  resolucion: [1920, 1080]
+  intervalo_minutos: 60
+  # Requiere: ANTHROPIC_API_KEY en .env para analisis IA
 
 # Histeresis: margen antes de apagar (evita oscilar)
 histeresis:

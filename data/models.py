@@ -22,8 +22,40 @@ CREATE TABLE IF NOT EXISTS config (
     updated_at DATETIME DEFAULT (datetime('now', 'localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS soil_readings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
+    zone_id TEXT NOT NULL,
+    sensor_id TEXT NOT NULL,
+    variable TEXT NOT NULL,
+    value REAL
+);
+
+CREATE TABLE IF NOT EXISTS irrigation_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
+    zone_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    duration_seconds INTEGER,
+    soil_humidity REAL,
+    soil_ph REAL,
+    reason TEXT,
+    triggered_by TEXT DEFAULT 'scheduler'
+);
+
+CREATE TABLE IF NOT EXISTS camera_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
+    filename TEXT NOT NULL,
+    analysis TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_sensor_timestamp ON sensor_readings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_timestamp ON actuator_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_soil_timestamp ON soil_readings(timestamp);
+CREATE INDEX IF NOT EXISTS idx_soil_zone ON soil_readings(zone_id);
+CREATE INDEX IF NOT EXISTS idx_irrigation_timestamp ON irrigation_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_irrigation_zone ON irrigation_events(zone_id);
 """
 
 # Configuracion por defecto al inicializar
@@ -36,6 +68,8 @@ DEFAULT_CONFIG = {
     "alert_enabled": "false",
     "telegram_token": "",
     "telegram_chat_id": "",
+    "irrigation_mode": "auto",
+    "camera_interval_minutes": "60",
 }
 
 # Umbrales por etapa de cultivo

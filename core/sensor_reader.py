@@ -2,6 +2,7 @@ import statistics
 import time
 import Adafruit_DHT
 from core.Sensores.co2_pwm_sensor import CO2PWMSensor
+from core.Sensores.arduino_serial import ArduinoSerialHub
 
 
 class SensorReader:
@@ -15,6 +16,8 @@ class SensorReader:
         "temperatura": (-40, 80),
         "humedad": (0, 100),
         "co2": (0, 5000),
+        "humedad_suelo": (0, 100),
+        "ph_suelo": (0, 14),
     }
 
     def __init__(self, config):
@@ -22,6 +25,19 @@ class SensorReader:
         self.sensores = config.obtener("sensores", {})
         self._drivers = {}  # Cache de drivers inicializados
         self._sensor_status = {}  # Estado de salud de cada sensor
+        self._arduino_hub = None  # Singleton por puerto serial
+
+        # Inicializar Arduino hub si hay sensores ARDUINO_SERIAL
+        arduino_config = config.obtener("arduino", {})
+        if arduino_config.get("puerto"):
+            self._arduino_hub = ArduinoSerialHub(
+                port=arduino_config["puerto"],
+                baudrate=arduino_config.get("baudrate", 115200),
+                timeout=arduino_config.get("timeout", 2)
+            )
+            self._arduino_hub.start()
+            print(f"ArduinoHub iniciado en {arduino_config['puerto']}")
+
         print(f"SensorReader inicializado con variables: {list(self.sensores.keys())}")
 
     def _get_driver(self, sensor_config):
@@ -38,9 +54,9 @@ class SensorReader:
             self._drivers[sensor_id] = {"tipo": "DHT22", "pin": pin}
         elif tipo == "CO2_PWM":
             self._drivers[sensor_id] = CO2PWMSensor(pin)
-        # Futuro: ARDUINO_SERIAL
-        # elif tipo == "ARDUINO_SERIAL":
-        #     self._drivers[sensor_id] = ArduinoSerialNode(sensor_config)
+        elif tipo == "ARDUINO_SERIAL":
+            # Usa el hub compartido, no crea driver individual
+            self._drivers[sensor_id] = {"tipo": "ARDUINO_SERIAL", "id": sensor_id}
 
         return self._drivers.get(sensor_id)
 
@@ -69,6 +85,19 @@ class SensorReader:
                     return result["co2"]
                 else:
                     self._sensor_status[sensor_id] = "sin_datos"
+                    return None
+
+            elif tipo == "ARDUINO_SERIAL":
+                if self._arduino_hub:
+                    value = self._arduino_hub.get_reading(sensor_id)
+                    if value is not None:
+                        self._sensor_status[sensor_id] = "ok"
+                        return value
+                    else:
+                        self._sensor_status[sensor_id] = "sin_datos"
+                        return None
+                else:
+                    self._sensor_status[sensor_id] = "hub_no_disponible"
                     return None
 
         except Exception as e:
@@ -143,6 +172,39 @@ class SensorReader:
         for variable in self.sensores:
             result[variable] = self.read_variable(variable)
         return result
+
+    def read_zone_data(self):
+        """
+        Lee sensores de suelo agrupados por zona.
+        Retorna: {"zona_1": {"humedad_suelo": 45.2, "ph_suelo": 6.3}, ...}
+        """
+        result = {}
+        for variable in ["humedad_suelo", "ph_suelo"]:
+            fuentes = self.sensores.get(variable, [])
+            for sensor_config in fuentes:
+                zone = sensor_config.get("zona", "default")
+                if zone not in result:
+                    result[zone] = {}
+                value = self._read_single(variable, sensor_config)
+                if self._is_valid(variable, value):
+                    # Acumular valores para promediar si hay multiples sensores
+                    key = f"{variable}_values"
+                    if key not in result[zone]:
+                        result[zone][key] = []
+                    result[zone][key].append(value)
+
+        # Consolidar multiples lecturas por zona usando mediana
+        for zone in result:
+            for variable in ["humedad_suelo", "ph_suelo"]:
+                key = f"{variable}_values"
+                if key in result[zone]:
+                    result[zone][variable] = self._consolidate(result[zone].pop(key))
+
+        return result
+
+    def get_arduino_hub(self):
+        """Retorna el hub Arduino para acceso directo."""
+        return self._arduino_hub
 
     def get_sensor_health(self):
         """Retorna el estado de salud de cada sensor."""

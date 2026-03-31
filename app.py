@@ -8,6 +8,8 @@ from core.sensor_reader import SensorReader
 from core.actuator_manager import ActuatorManager
 from core.gpio_setup import inicializar_gpio, limpiar_gpio
 from data.database import Database
+from core.irrigation_manager import IrrigationManager
+from core.camera_manager import CameraManager
 from dotenv import load_dotenv
 import threading
 import time
@@ -46,6 +48,8 @@ config.cargar_configuracion()
 sensor_reader = SensorReader(config)
 actuator_manager = ActuatorManager(config)
 db = Database()
+irrigation_manager = IrrigationManager(config, sensor_reader, actuator_manager, db)
+camera_manager = CameraManager(config, db)
 
 # Ultima lectura de sensores (compartida entre threads)
 latest_sensor_data = {}
@@ -144,6 +148,89 @@ def sensor_health():
     detailed = sensor_reader.read_all_detailed()
     return jsonify({"health": health, "readings": detailed})
 
+# --- Riego API ---
+
+@app.route("/api/irrigation/status")
+@login_required
+def irrigation_status():
+    return jsonify({
+        "zones": irrigation_manager.get_zones(),
+        "status": irrigation_manager.get_status(),
+        "enabled": irrigation_manager.enabled
+    })
+
+@app.route("/api/irrigation/history")
+@login_required
+def irrigation_history():
+    hours = request.args.get("hours", 48, type=int)
+    events = db.get_irrigation_events(hours=hours)
+    return jsonify(events)
+
+@app.route("/api/irrigation/manual", methods=["POST"])
+@login_required
+def irrigation_manual():
+    data = request.get_json()
+    zone_id = data.get("zone_id")
+    duration = data.get("duration_minutes", 5)
+    result = irrigation_manager.manual_irrigate(zone_id, duration)
+    if result.get("ok"):
+        socketio.emit("irrigation_status", irrigation_manager.get_status())
+    return jsonify(result)
+
+@app.route("/api/irrigation/stop", methods=["POST"])
+@login_required
+def irrigation_stop():
+    data = request.get_json()
+    zone_id = data.get("zone_id")
+    if zone_id:
+        result = irrigation_manager.close_valve(zone_id, reason="manual_stop")
+    else:
+        irrigation_manager.emergency_stop()
+        result = {"ok": True}
+    socketio.emit("irrigation_status", irrigation_manager.get_status())
+    return jsonify(result)
+
+# --- Suelo API ---
+
+@app.route("/api/soil")
+@login_required
+def get_soil():
+    zone_data = sensor_reader.read_zone_data()
+    return jsonify(zone_data)
+
+@app.route("/api/soil/history")
+@login_required
+def soil_history():
+    zone_id = request.args.get("zone_id")
+    hours = request.args.get("hours", 24, type=int)
+    readings = db.get_soil_readings(zone_id=zone_id, hours=hours)
+    return jsonify(readings)
+
+# --- Camara API ---
+
+@app.route("/api/camera/capture", methods=["POST"])
+@login_required
+def camera_capture():
+    result = camera_manager.capture_and_analyze()
+    return jsonify(result)
+
+@app.route("/api/camera/status")
+@login_required
+def camera_status():
+    return jsonify(camera_manager.get_status())
+
+@app.route("/api/camera/history")
+@login_required
+def camera_history():
+    events = db.get_camera_events(limit=20)
+    return jsonify(events)
+
+@app.route("/api/camera/image/<filename>")
+@login_required
+def camera_image(filename):
+    from flask import send_from_directory
+    return send_from_directory("data/captures", filename)
+
 # --- Socket.IO Events ---
 
 @socketio.on("connect")
@@ -157,6 +244,21 @@ def handle_connect():
 @socketio.on("disconnect")
 def handle_disconnect():
     print("Cliente desconectado")
+
+@socketio.on("manual_irrigate")
+def handle_manual_irrigate(data):
+    zone_id = data.get("zone_id")
+    duration = data.get("duration_minutes", 5)
+    result = irrigation_manager.manual_irrigate(zone_id, duration)
+    if not result.get("ok"):
+        emit("alert", {"type": "error", "message": result.get("error", "")})
+    socketio.emit("irrigation_status", irrigation_manager.get_status())
+
+@socketio.on("stop_irrigation")
+def handle_stop_irrigation(data):
+    zone_id = data.get("zone_id")
+    irrigation_manager.close_valve(zone_id, reason="manual_stop")
+    socketio.emit("irrigation_status", irrigation_manager.get_status())
 
 @socketio.on("toggle_actuador")
 def handle_toggle(data):
@@ -211,6 +313,18 @@ def sensor_background_thread():
             print(f"Sensores: temp={temp}, hum={hum}, co2={co2}", flush=True)
             socketio.emit("sensor_data", filtered)
 
+            # Leer sensores de suelo (Arduino) si disponibles
+            try:
+                zone_data = sensor_reader.read_zone_data()
+                if zone_data:
+                    for zone_id, readings in zone_data.items():
+                        for variable, value in readings.items():
+                            if value is not None:
+                                db.save_soil_reading(zone_id, "consolidated", variable, value)
+                    socketio.emit("soil_data", zone_data)
+            except Exception:
+                pass
+
         except Exception as e:
             print(f"Error en lectura de sensores: {e}", flush=True)
 
@@ -224,7 +338,11 @@ if __name__ == "__main__":
     try:
         sensor_thread = threading.Thread(target=sensor_background_thread, daemon=True)
         sensor_thread.start()
+        irrigation_manager.start()
+        camera_manager.start()
         print("Dashboard disponible en http://0.0.0.0:5000")
         socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
     finally:
+        irrigation_manager.stop()
+        camera_manager.stop()
         limpiar_gpio()

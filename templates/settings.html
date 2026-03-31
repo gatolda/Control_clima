@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajustes — Control Climatico</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body>
+<div class="app-shell">
+
+    <!-- ===== TOP BAR ===== -->
+    <nav class="topbar">
+        <div class="topbar-brand">
+            <div class="topbar-logo">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+            </div>
+            <div>
+                <div class="topbar-title">Control Climatico</div>
+                <div class="topbar-subtitle">Invernadero</div>
+            </div>
+        </div>
+
+        <div class="topbar-nav">
+            <a href="/" class="nav-tab">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="/diagnostics" class="nav-tab">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                <span>Diagnosticos</span>
+            </a>
+            <a href="/settings" class="nav-tab active">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Ajustes</span>
+            </a>
+        </div>
+
+        <div class="topbar-status">
+            <div class="status-indicator" id="conn-dot"></div>
+            <span class="status-text" id="conn-text">Conectando...</span>
+        </div>
+    </nav>
+
+    <!-- ===== MAIN ===== -->
+    <main class="main-content">
+
+        <div class="page-header fade-in">
+            <h1>Ajustes del Sistema</h1>
+            <p>Configuracion de etapas, umbrales y parametros del invernadero</p>
+        </div>
+
+        <div class="settings-layout">
+
+            <!-- Nav sidebar -->
+            <div class="card fade-in" style="padding: 12px; height: fit-content;">
+                <div class="settings-nav">
+                    <button class="settings-nav-item active" onclick="showPanel('stage')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/></svg>
+                        Etapa de Cultivo
+                    </button>
+                    <button class="settings-nav-item" onclick="showPanel('thresholds')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+                        Umbrales
+                    </button>
+                    <button class="settings-nav-item" onclick="showPanel('system')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+                        Sistema
+                    </button>
+                </div>
+            </div>
+
+            <!-- Panels -->
+            <div>
+
+                <!-- Stage Panel -->
+                <div class="settings-panel active" id="panel-stage">
+                    <div class="card fade-in">
+                        <div class="section-title" style="margin-top: 0;">Etapa de Cultivo Actual</div>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+                            La etapa determina los rangos optimos de temperatura, humedad y CO2 para el control automatico.
+                        </p>
+
+                        <div class="form-group">
+                            <label class="form-label">Etapa activa</label>
+                            <select class="form-select" id="stage-select">
+                                <option value="germinacion">Germinacion</option>
+                                <option value="plantula">Plantula</option>
+                                <option value="vegetativo_temprano">Vegetativo Temprano</option>
+                                <option value="vegetativo_tardio">Vegetativo Tardio</option>
+                                <option value="pre_floracion">Pre-Floracion</option>
+                                <option value="floracion">Floracion</option>
+                                <option value="maduracion">Maduracion</option>
+                                <option value="secado">Secado</option>
+                                <option value="curado">Curado</option>
+                            </select>
+                            <div class="form-hint">Los umbrales se ajustaran automaticamente segun la etapa</div>
+                        </div>
+
+                        <!-- Current thresholds preview -->
+                        <div class="section-title">Umbrales de la Etapa</div>
+                        <div class="threshold-grid" id="stage-thresholds">
+                            <div class="card threshold-card">
+                                <h4>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z"/></svg>
+                                    Temperatura
+                                </h4>
+                                <div class="threshold-values">
+                                    <div class="threshold-row">
+                                        <span class="threshold-label">Minimo</span>
+                                        <span class="text-mono" id="th-temp-min" style="color: var(--blue);">--</span>
+                                    </div>
+                                    <div class="threshold-row">
+                                        <span class="threshold-label">Maximo</span>
+                                        <span class="text-mono" id="th-temp-max" style="color: var(--red);">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card threshold-card">
+                                <h4>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+                                    Humedad
+                                </h4>
+                                <div class="threshold-values">
+                                    <div class="threshold-row">
+                                        <span class="threshold-label">Minimo</span>
+                                        <span class="text-mono" id="th-hum-min" style="color: var(--blue);">--</span>
+                                    </div>
+                                    <div class="threshold-row">
+                                        <span class="threshold-label">Maximo</span>
+                                        <span class="text-mono" id="th-hum-max" style="color: var(--red);">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card threshold-card">
+                                <h4>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                                    CO2
+                                </h4>
+                                <div class="threshold-values">
+                                    <div class="threshold-row">
+                                        <span class="threshold-label">Minimo</span>
+                                        <span class="text-mono" id="th-co2-min" style="color: var(--blue);">--</span>
+                                    </div>
+                                    <div class="threshold-row">
+                                        <span class="threshold-label">Maximo</span>
+                                        <span class="text-mono" id="th-co2-max" style="color: var(--red);">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="gap-row mt-4">
+                            <button class="btn-primary" onclick="saveStage()">Guardar Etapa</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thresholds Panel -->
+                <div class="settings-panel" id="panel-thresholds">
+                    <div class="card fade-in">
+                        <div class="section-title" style="margin-top: 0;">Umbrales Personalizados</div>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+                            Ajusta manualmente los limites de cada variable. Estos valores sobreescriben los de la etapa.
+                        </p>
+
+                        <div class="form-group">
+                            <label class="form-label">Temperatura</label>
+                            <div class="form-row">
+                                <div>
+                                    <label class="form-hint">Minimo (&deg;C)</label>
+                                    <input type="number" class="form-input" id="custom-temp-min" step="0.5" placeholder="18">
+                                </div>
+                                <div>
+                                    <label class="form-hint">Maximo (&deg;C)</label>
+                                    <input type="number" class="form-input" id="custom-temp-max" step="0.5" placeholder="26">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Humedad</label>
+                            <div class="form-row">
+                                <div>
+                                    <label class="form-hint">Minimo (%)</label>
+                                    <input type="number" class="form-input" id="custom-hum-min" step="1" placeholder="50">
+                                </div>
+                                <div>
+                                    <label class="form-hint">Maximo (%)</label>
+                                    <input type="number" class="form-input" id="custom-hum-max" step="1" placeholder="70">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">CO2</label>
+                            <div class="form-row">
+                                <div>
+                                    <label class="form-hint">Minimo (ppm)</label>
+                                    <input type="number" class="form-input" id="custom-co2-min" step="50" placeholder="400">
+                                </div>
+                                <div>
+                                    <label class="form-hint">Maximo (ppm)</label>
+                                    <input type="number" class="form-input" id="custom-co2-max" step="50" placeholder="1200">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Histeresis</label>
+                            <div class="form-row">
+                                <div>
+                                    <label class="form-hint">Temperatura (&deg;C)</label>
+                                    <input type="number" class="form-input" id="hyst-temp" step="0.5" value="1.5">
+                                </div>
+                                <div>
+                                    <label class="form-hint">Humedad (%)</label>
+                                    <input type="number" class="form-input" id="hyst-hum" step="1" value="5">
+                                </div>
+                            </div>
+                            <div class="form-row mt-4">
+                                <div>
+                                    <label class="form-hint">CO2 (ppm)</label>
+                                    <input type="number" class="form-input" id="hyst-co2" step="10" value="50">
+                                </div>
+                                <div>
+                                    <label class="form-hint">Tiempo minimo (seg)</label>
+                                    <input type="number" class="form-input" id="hyst-time" step="30" value="180">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="gap-row mt-4">
+                            <button class="btn-primary" onclick="saveThresholds()">Guardar Umbrales</button>
+                            <button class="btn-secondary" onclick="loadThresholds()">Restaurar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Panel -->
+                <div class="settings-panel" id="panel-system">
+                    <div class="card fade-in">
+                        <div class="section-title" style="margin-top: 0;">Configuracion del Sistema</div>
+
+                        <div class="form-group">
+                            <label class="form-label">Nombre del sistema</label>
+                            <input type="text" class="form-input" id="sys-name" value="Control Climatico Invernadero">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Ubicacion</label>
+                            <input type="text" class="form-input" id="sys-location" value="Invernadero Principal">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Intervalo de lectura</label>
+                            <div class="form-row">
+                                <div>
+                                    <input type="number" class="form-input" id="sys-interval" min="1" max="60" value="5">
+                                    <div class="form-hint">Segundos entre cada lectura de sensores</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-title">Informacion</div>
+                        <div style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary); line-height: 1.8;">
+                            <div>Plataforma: <span style="color: var(--text-primary);">Raspberry Pi</span></div>
+                            <div>Sensores: <span style="color: var(--text-primary);">DHT22, MH-Z19D</span></div>
+                            <div>Actuadores: <span style="color: var(--text-primary);">9 reles</span></div>
+                            <div>Protocolo: <span style="color: var(--text-primary);">Flask + Socket.IO</span></div>
+                        </div>
+
+                        <div class="gap-row mt-4">
+                            <button class="btn-primary" onclick="saveSystem()">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const socket = io();
+
+socket.on('connect', () => {
+    document.getElementById('conn-dot').className = 'status-indicator online';
+    document.getElementById('conn-text').textContent = 'En linea';
+});
+socket.on('disconnect', () => {
+    document.getElementById('conn-dot').className = 'status-indicator offline';
+    document.getElementById('conn-text').textContent = 'Desconectado';
+});
+
+// --- Panel navigation ---
+function showPanel(name) {
+    document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.settings-nav-item').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    event.currentTarget.classList.add('active');
+}
+
+// --- Load thresholds ---
+function loadThresholds() {
+    fetch('/api/thresholds')
+        .then(r => r.json())
+        .then(data => {
+            const stage = data.stage || 'vegetativo_temprano';
+            document.getElementById('stage-select').value = stage;
+
+            const th = data.thresholds || {};
+            document.getElementById('th-temp-min').textContent = (th.temp_min ?? '--') + ' C';
+            document.getElementById('th-temp-max').textContent = (th.temp_max ?? '--') + ' C';
+            document.getElementById('th-hum-min').textContent = (th.hum_min ?? '--') + ' %';
+            document.getElementById('th-hum-max').textContent = (th.hum_max ?? '--') + ' %';
+            document.getElementById('th-co2-min').textContent = (th.co2_min ?? '--') + ' ppm';
+            document.getElementById('th-co2-max').textContent = (th.co2_max ?? '--') + ' ppm';
+
+            // Fill custom inputs
+            if (th.temp_min != null) document.getElementById('custom-temp-min').value = th.temp_min;
+            if (th.temp_max != null) document.getElementById('custom-temp-max').value = th.temp_max;
+            if (th.hum_min != null) document.getElementById('custom-hum-min').value = th.hum_min;
+            if (th.hum_max != null) document.getElementById('custom-hum-max').value = th.hum_max;
+            if (th.co2_min != null) document.getElementById('custom-co2-min').value = th.co2_min;
+            if (th.co2_max != null) document.getElementById('custom-co2-max').value = th.co2_max;
+        })
+        .catch(() => {});
+}
+
+// --- Load config ---
+function loadConfig() {
+    fetch('/api/config')
+        .then(r => r.json())
+        .then(data => {
+            if (data.system_name) document.getElementById('sys-name').value = data.system_name;
+            if (data.location) document.getElementById('sys-location').value = data.location;
+            if (data.read_interval) document.getElementById('sys-interval').value = data.read_interval;
+            if (data.hyst_temp) document.getElementById('hyst-temp').value = data.hyst_temp;
+            if (data.hyst_hum) document.getElementById('hyst-hum').value = data.hyst_hum;
+            if (data.hyst_co2) document.getElementById('hyst-co2').value = data.hyst_co2;
+            if (data.hyst_time) document.getElementById('hyst-time').value = data.hyst_time;
+        })
+        .catch(() => {});
+}
+
+// --- Save ---
+function saveStage() {
+    const stage = document.getElementById('stage-select').value;
+    fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: stage })
+    })
+    .then(r => r.json())
+    .then(() => {
+        showToast('Etapa actualizada: ' + stage.replace('_', ' '), 'success');
+        loadThresholds();
+    })
+    .catch(() => showToast('Error al guardar', 'error'));
+}
+
+function saveThresholds() {
+    const data = {
+        custom_temp_min: parseFloat(document.getElementById('custom-temp-min').value) || null,
+        custom_temp_max: parseFloat(document.getElementById('custom-temp-max').value) || null,
+        custom_hum_min: parseFloat(document.getElementById('custom-hum-min').value) || null,
+        custom_hum_max: parseFloat(document.getElementById('custom-hum-max').value) || null,
+        custom_co2_min: parseFloat(document.getElementById('custom-co2-min').value) || null,
+        custom_co2_max: parseFloat(document.getElementById('custom-co2-max').value) || null,
+        hyst_temp: parseFloat(document.getElementById('hyst-temp').value) || 1.5,
+        hyst_hum: parseFloat(document.getElementById('hyst-hum').value) || 5,
+        hyst_co2: parseFloat(document.getElementById('hyst-co2').value) || 50,
+        hyst_time: parseInt(document.getElementById('hyst-time').value) || 180,
+    };
+
+    fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(() => showToast('Umbrales guardados', 'success'))
+    .catch(() => showToast('Error al guardar', 'error'));
+}
+
+function saveSystem() {
+    const data = {
+        system_name: document.getElementById('sys-name').value,
+        location: document.getElementById('sys-location').value,
+        read_interval: parseInt(document.getElementById('sys-interval').value) || 5,
+    };
+
+    fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(() => showToast('Configuracion guardada', 'success'))
+    .catch(() => showToast('Error al guardar', 'error'));
+}
+
+// Initial load
+loadThresholds();
+loadConfig();
+
+// Stage change auto-preview
+document.getElementById('stage-select').addEventListener('change', () => {
+    // Preview will update after save
+});
+
+// Toast
+function showToast(message, type) {
+    const container = document.getElementById('toasts');
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + type;
+    toast.innerHTML = '<span>' + message + '</span>';
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.animation = 'toast-out 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+</script>
+</body>
+</html>

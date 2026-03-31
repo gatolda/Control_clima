@@ -35,16 +35,17 @@ sensores:
 
 # Actuadores
 actuadores:
+  # Pines BOARD verificados (modulo 8 reles)
+  # Rele 1=pin37, 2=pin35, 3=pin33, 4=pin31, 5=pin29, 6=pin32, 7=pin36, 8=pin38
   pines:
-    ventiladores: 12
-    filtro_carbon: 13
-    intractor: 15
-    humidificador: 16
-    deshumidificador: 18
-    luz: 22
-    calefactor: 29
-    aire_acondicionado: 31
-    ozono: 33
+    ventiladores: 37       # Rele 1
+    filtro_carbon: 35      # Rele 2
+    intractor: 33          # Rele 3
+    humidificador: 31      # Rele 4
+    deshumidificador: 29   # Rele 5
+    luz: 32                # Rele 6
+    calefactor: 36         # Rele 7
+    aire_acondicionado: 38 # Rele 8
   tipo_activacion: "activo_bajo"
 
   # Pares que NUNCA deben estar activos al mismo tiempo

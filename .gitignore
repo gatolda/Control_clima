@@ -16,11 +16,17 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Secrets and environment
+.env
+
 # Calibration and local data
 *.log
 *.db
 *.sqlite
 calibracion_pwm.txt
+
+# Preview server (solo para pruebas locales)
+preview_server.py
 
 # Python egg
 *.egg

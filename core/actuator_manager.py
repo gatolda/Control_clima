@@ -21,7 +21,10 @@ class ActuatorManager:
             print(f"  {nombre} -> pin {pin}")
             GPIO.setup(pin, GPIO.OUT)
             # Apagar todo al inicio
-            if self.relay_mode == "activo_bajo":
+            if self.relay_mode == "nc_invertido":
+                # Equipos en NC: rele activado (LOW) = equipo apagado
+                GPIO.output(pin, GPIO.LOW)
+            elif self.relay_mode == "activo_bajo":
                 GPIO.output(pin, GPIO.HIGH)
             else:
                 GPIO.output(pin, GPIO.LOW)
@@ -57,7 +60,10 @@ class ActuatorManager:
     def _set_output(self, nombre, estado):
         """Establece el estado fisico de un rele."""
         pin = self.relay_pins[nombre]
-        if self.relay_mode == "activo_bajo":
+        if self.relay_mode == "nc_invertido":
+            # Equipos en NC: HIGH = rele desactivado = NC cerrado = equipo ON
+            GPIO.output(pin, GPIO.HIGH if estado else GPIO.LOW)
+        elif self.relay_mode == "activo_bajo":
             GPIO.output(pin, GPIO.LOW if estado else GPIO.HIGH)
         else:
             GPIO.output(pin, GPIO.HIGH if estado else GPIO.LOW)

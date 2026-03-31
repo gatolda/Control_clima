@@ -1,19 +1,45 @@
 # app.py
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect, url_for
 from flask_socketio import SocketIO, emit
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 from core.config_loader import ConfigLoader
 from core.sensor_reader import SensorReader
 from core.actuator_manager import ActuatorManager
 from core.gpio_setup import inicializar_gpio, limpiar_gpio
 from data.database import Database
+from dotenv import load_dotenv
 import threading
 import time
+import os
+
+load_dotenv()
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "invernadero-secret"
+app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
-# Inicializar
+# --- Autenticacion ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
+# Credenciales desde variables de entorno (.env)
+USERS = {
+    os.environ.get("ADMIN_USER", "admin"): generate_password_hash(os.environ["ADMIN_PASSWORD"])
+}
+
+class User(UserMixin):
+    def __init__(self, username):
+        self.id = username
+
+@login_manager.user_loader
+def load_user(username):
+    if username in USERS:
+        return User(username)
+    return None
+
+# Inicializar hardware
 inicializar_gpio()
 config = ConfigLoader()
 config.cargar_configuracion()
@@ -25,48 +51,79 @@ db = Database()
 latest_sensor_data = {}
 sensor_lock = threading.Lock()
 
-# --- Rutas HTTP ---
+# --- Login ---
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if username in USERS and check_password_hash(USERS[username], password):
+            login_user(User(username), remember=True)
+            return redirect(request.args.get("next") or url_for("index"))
+        error = "Usuario o contrasenya incorrectos"
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
+
+# --- Rutas HTTP (protegidas) ---
 
 @app.route("/")
+@login_required
 def index():
     actuadores = list(actuator_manager.relay_pins.keys())
     return render_template("dashboard.html", actuadores=actuadores)
 
 @app.route("/diagnostics")
+@login_required
 def diagnostics():
     actuadores = list(actuator_manager.relay_pins.keys())
     return render_template("diagnostics.html", actuadores=actuadores)
 
 @app.route("/settings")
+@login_required
 def settings():
     return render_template("settings.html")
 
 @app.route("/sensores")
+@login_required
 def get_sensores():
     with sensor_lock:
         return jsonify(latest_sensor_data)
 
 @app.route("/actuadores/estado")
+@login_required
 def estado_actuadores():
     return jsonify(actuator_manager.status())
 
 @app.route("/api/history")
+@login_required
 def get_history():
     hours = request.args.get("hours", 24, type=int)
     readings = db.get_readings(hours=hours)
     return jsonify(readings)
 
 @app.route("/api/events")
+@login_required
 def get_events():
     hours = request.args.get("hours", 24, type=int)
     events = db.get_actuator_events(hours=hours)
     return jsonify(events)
 
 @app.route("/api/config", methods=["GET"])
+@login_required
 def get_config():
     return jsonify(db.get_all_config())
 
 @app.route("/api/config", methods=["POST"])
+@login_required
 def update_config():
     data = request.get_json()
     for key, value in data.items():
@@ -74,12 +131,14 @@ def update_config():
     return jsonify({"status": "ok"})
 
 @app.route("/api/thresholds")
+@login_required
 def get_thresholds():
     stage = db.get_config("stage", "vegetativo_temprano")
     thresholds = db.get_stage_thresholds(stage)
     return jsonify({"stage": stage, "thresholds": thresholds})
 
 @app.route("/api/sensor-health")
+@login_required
 def sensor_health():
     health = sensor_reader.get_sensor_health()
     detailed = sensor_reader.read_all_detailed()

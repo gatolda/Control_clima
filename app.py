@@ -189,11 +189,11 @@ def sensor_background_thread():
             co2 = datos.get("co2", {}).get("co2")
 
             # Filtrar lecturas erraticas del DHT22
-            if temp is not None and (temp < -40 or temp > 80):
+            if temp is not None and (temp <= 0 or temp > 80):
                 temp = None
-            if hum is not None and (hum < 0 or hum > 100):
+            if hum is not None and (hum <= 0 or hum > 100):
                 hum = None
-            if co2 is not None and (co2 < 0 or co2 > 5000):
+            if co2 is not None and (co2 <= 0 or co2 > 5000):
                 co2 = None
 
             # Reconstruir datos filtrados

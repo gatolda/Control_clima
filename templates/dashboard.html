@@ -441,13 +441,14 @@ function drawChart() {
     }
 
     function drawLine(points, color, maxVal) {
-        if (points.length < 2) return;
+        const valid = points.filter(p => p != null && p > 0);
+        if (valid.length < 2) return;
         ctx.beginPath();
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;
         ctx.lineJoin = 'round';
-        points.forEach((p, i) => {
-            const x = pad.left + (i / (points.length - 1)) * plotW;
+        valid.forEach((p, i) => {
+            const x = pad.left + (i / (valid.length - 1)) * plotW;
             const y = pad.top + plotH - (p / maxVal) * plotH;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         });
@@ -496,9 +497,9 @@ function loadHistory() {
         .then(r => r.json())
         .then(data => {
             if (Array.isArray(data)) {
-                chartData.temp = data.map(d => d.temperature ?? 0);
-                chartData.hum = data.map(d => d.humidity ?? 0);
-                chartData.co2 = data.map(d => d.co2 ?? 0);
+                chartData.temp = data.map(d => d.temperature).filter(v => v != null && v > 0);
+                chartData.hum = data.map(d => d.humidity).filter(v => v != null && v > 0);
+                chartData.co2 = data.map(d => d.co2).filter(v => v != null && v > 0);
                 drawChart();
                 drawAllSparklines();
             }

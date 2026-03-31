@@ -1,0 +1,51 @@
+Test ID,Category,Description,Priority,Status,Date,Notes
+TC-REL-001,Reles,Activar rele individual,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-REL-002,Reles,Desactivar rele individual,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-REL-003,Reles,Logica activo_bajo todos los pines,P0,PASSED,2026-03-31,8/8 pines verificados
+TC-REL-004,Reles,Estado inicial al arranque,P0,PASSED,2026-03-31,8/8 actuadores OFF al inicio
+TC-REL-005,Reles,Activar multiples reles simultaneos,P1,PASSED,2026-03-31,Verificado en TC-CON-006
+TC-REL-006,Reles,Todos los reles ON/OFF,P1,PASSED,2026-03-31,Verificado en TC-REL-003
+TC-REL-007,Reles,Pin mapping correcto,P0,PASSED,2026-03-30,Verificado manualmente pin a pin
+TC-REL-008,Reles,Actuador inexistente,P2,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-REL-009,Reles,Emergency stop,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-REL-010,Reles,Cleanup al cerrar app,P1,NOT RUN,,
+TC-REL-011,Reles,Persistencia estado tras reconexion,P2,NOT RUN,,
+TC-REL-012,Reles,Toggle rapido sin oscilacion,P1,NOT RUN,,
+TC-CON-001,Conflictos,Calefactor bloquea AC,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-CON-002,Conflictos,AC bloquea calefactor,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-CON-003,Conflictos,Humidificador bloquea deshum,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-CON-004,Conflictos,Deshum bloquea humidificador,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-CON-005,Conflictos,Desactivar permite activar segundo,P0,PASSED,2026-03-31,Automatizado test_actuators.py
+TC-CON-006,Conflictos,Actuadores sin conflicto coexisten,P1,PASSED,2026-03-31,4 actuadores simultaneos OK
+TC-SEN-001,Sensores,Lectura de temperatura,P0,NOT RUN,,
+TC-SEN-002,Sensores,Lectura de humedad,P0,NOT RUN,,
+TC-SEN-003,Sensores,Lectura de CO2,P0,NOT RUN,,
+TC-SEN-004,Sensores,Filtro lecturas erraticas temp 0,P0,NOT RUN,,
+TC-SEN-005,Sensores,Filtro lecturas fuera de rango,P1,NOT RUN,,
+TC-SEN-006,Sensores,Actualizacion tiempo real SocketIO,P1,NOT RUN,,
+TC-SEN-007,Sensores,Sparkline 24h sin picos,P1,NOT RUN,,
+TC-SEN-008,Sensores,Sensor health endpoint,P2,NOT RUN,,
+TC-AUT-001,Auth,Login exitoso,P0,NOT RUN,,
+TC-AUT-002,Auth,Login fallido password incorrecto,P0,NOT RUN,,
+TC-AUT-003,Auth,Login fallido usuario inexistente,P0,NOT RUN,,
+TC-AUT-004,Auth,Rutas protegidas sin login,P0,NOT RUN,,
+TC-AUT-005,Auth,Logout,P1,NOT RUN,,
+TC-AUT-006,Auth,Remember me persistencia sesion,P2,NOT RUN,,
+TC-DSH-001,Dashboard,Carga inicial,P1,NOT RUN,,
+TC-DSH-002,Dashboard,Indicador OPTIMO/ALERTA,P1,NOT RUN,,
+TC-DSH-003,Dashboard,Toggle actuador desde dashboard,P0,PASSED,2026-03-30,Verificado con reles fisicos
+TC-DSH-004,Dashboard,Alerta conflicto en dashboard,P0,NOT RUN,,
+TC-DSH-005,Dashboard,Navegacion entre paginas,P2,NOT RUN,,
+TC-DSH-006,Dashboard,Reconexion SocketIO,P1,NOT RUN,,
+TC-DSH-007,Dashboard,Pagina diagnosticos,P2,NOT RUN,,
+TC-DSH-008,Dashboard,Responsive movil,P2,NOT RUN,,
+TC-API-001,API,GET /sensores,P1,NOT RUN,,
+TC-API-002,API,GET /actuadores/estado,P1,NOT RUN,,
+TC-API-003,API,GET /api/history,P1,NOT RUN,,
+TC-API-004,API,GET /api/thresholds,P1,NOT RUN,,
+TC-API-005,API,GET /api/sensor-health,P2,NOT RUN,,
+TC-API-006,API,GET /api/events,P2,NOT RUN,,
+TC-DB-001,Database,Guardar lectura sensores,P1,NOT RUN,,
+TC-DB-002,Database,Historial 24h,P1,NOT RUN,,
+TC-DB-003,Database,Log eventos actuadores,P2,NOT RUN,,
+TC-DB-004,Database,Cleanup datos antiguos,P2,NOT RUN,,

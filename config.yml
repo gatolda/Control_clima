@@ -26,36 +26,17 @@ sensores:
       pin: 11
       ubicacion: "centro"
 
-  # Sensores de suelo via Arduino (habilitar cuando haya hardware)
-  # humedad_suelo:
-  #   - id: "suelo_h_1"
-  #     tipo: ARDUINO_SERIAL
-  #     puerto: "/dev/ttyUSB0"
-  #     zona: "zona_1"
-  #   - id: "suelo_h_2"
-  #     tipo: ARDUINO_SERIAL
-  #     puerto: "/dev/ttyUSB0"
-  #     zona: "zona_1"
-  #   - id: "suelo_h_3"
-  #     tipo: ARDUINO_SERIAL
-  #     puerto: "/dev/ttyUSB0"
-  #     zona: "zona_2"
-  #
-  # ph_suelo:
-  #   - id: "suelo_ph_1"
-  #     tipo: ARDUINO_SERIAL
-  #     puerto: "/dev/ttyUSB0"
-  #     zona: "zona_1"
-  #   - id: "suelo_ph_2"
-  #     tipo: ARDUINO_SERIAL
-  #     puerto: "/dev/ttyUSB0"
-  #     zona: "zona_2"
+  humedad_suelo:
+    - id: "suelo_h_1"
+      tipo: ARDUINO_SERIAL
+      puerto: "/dev/ttyUSB0"
+      zona: "zona_1"
 
-# Arduino hub (habilitar cuando haya hardware)
-# arduino:
-#   puerto: "/dev/ttyUSB0"
-#   baudrate: 115200
-#   timeout: 2
+# Arduino hub
+arduino:
+  puerto: "/dev/ttyUSB0"
+  baudrate: 115200
+  timeout: 2
 
 # Actuadores
 actuadores:

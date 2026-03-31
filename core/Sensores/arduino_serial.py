@@ -94,7 +94,7 @@ class ArduinoSerialHub:
                 if "heartbeat" in data:
                     continue
 
-                if "sensors" in data:
+                if "sensors" in data and isinstance(data["sensors"], list):
                     with self._lock:
                         for sensor in data["sensors"]:
                             sid = sensor.get("id")

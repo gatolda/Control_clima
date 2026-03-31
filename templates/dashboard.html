@@ -142,6 +142,36 @@
                     </div>
                 </div>
             </div>
+            <!-- Soil Humidity -->
+            <div class="sensor-card card fade-in" id="card-soil" data-status="none">
+                <div class="sensor-header">
+                    <div class="sensor-label">
+                        <div class="sensor-icon soil" style="background: rgba(76, 175, 80, 0.1);">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/><path d="M12 22v-7"/><path d="M8.1 13.8 12 15"/><path d="M15.9 13.8 12 15"/></svg>
+                        </div>
+                        <span class="sensor-name">Humedad Suelo</span>
+                    </div>
+                    <span class="sensor-badge none" id="badge-soil">---</span>
+                </div>
+                <div class="sensor-readout">
+                    <span class="sensor-value" id="val-soil">--</span>
+                    <span class="sensor-unit">%</span>
+                </div>
+                <div class="sensor-gauge">
+                    <div class="sensor-gauge-fill" id="bar-soil" style="width: 0%; background: #4caf50;"></div>
+                </div>
+                <div class="sensor-range">
+                    <span>0% seco</span>
+                    <span>100% mojado</span>
+                </div>
+                <div class="sensor-sparkline">
+                    <canvas id="spark-soil"></canvas>
+                    <div class="sparkline-meta">
+                        <span class="sparkline-label">Arduino</span>
+                        <span class="sparkline-minmax" id="minmax-soil">-- / --</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Actuators -->
@@ -294,9 +324,44 @@ function updateSensors(data) {
 
 socket.on('sensor_data', data => updateSensors(data));
 
+// Soil data from Arduino
+let soilHistory = [];
+function updateSoil(data) {
+    // data = {"zona_1": {"humedad_suelo": 45.2}}
+    for (const [zone, readings] of Object.entries(data)) {
+        const soil = readings.humedad_suelo;
+        if (soil !== null && soil !== undefined && soil >= 0 && soil <= 100) {
+            document.getElementById('val-soil').textContent = soil.toFixed(1);
+            document.getElementById('bar-soil').style.width = soil + '%';
+
+            let status, badgeText, color;
+            if (soil < 20) { status = 'hot'; badgeText = 'Seco'; color = '#ff6b6b'; }
+            else if (soil < 40) { status = 'warn'; badgeText = 'Bajo'; color = '#ffa726'; }
+            else if (soil <= 70) { status = 'good'; badgeText = 'Optimo'; color = '#4caf50'; }
+            else { status = 'cold'; badgeText = 'Mojado'; color = '#4facfe'; }
+
+            document.getElementById('card-soil').dataset.status = status;
+            document.getElementById('bar-soil').style.background = color;
+            const badge = document.getElementById('badge-soil');
+            badge.textContent = badgeText;
+            badge.className = 'sensor-badge ' + status;
+
+            soilHistory.push(soil);
+            if (soilHistory.length > 100) soilHistory.shift();
+            if (soilHistory.length > 1) {
+                drawSparkline('spark-soil', soilHistory, 'rgb(76, 175, 80)',
+                    Math.min(...soilHistory) - 5, Math.max(...soilHistory) + 5);
+                updateMinMax('minmax-soil', soilHistory, '%');
+            }
+        }
+    }
+}
+socket.on('soil_data', data => updateSoil(data));
+
 // Fallback polling
 setInterval(() => {
     fetch('/sensores').then(r => r.json()).then(updateSensors).catch(() => {});
+    fetch('/api/soil').then(r => r.json()).then(updateSoil).catch(() => {});
 }, 5000);
 
 // --- Actuator Updates ---

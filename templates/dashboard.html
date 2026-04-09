@@ -212,6 +212,53 @@
             {% endfor %}
         </div>
 
+        <!-- Climate Controller -->
+        <div class="section-title fade-in">Control Automatico</div>
+        <div class="card climate-panel fade-in" id="climate-panel">
+            <div class="climate-header">
+                <div class="climate-mode">
+                    <span class="climate-mode-label">Modo:</span>
+                    <button class="btn climate-mode-btn" id="btn-mode" onclick="toggleClimateMode()">Manual</button>
+                </div>
+                <div class="climate-stage-info">
+                    <span class="climate-stage-label" id="stage-label">---</span>
+                    <span class="climate-stage-desc" id="stage-desc"></span>
+                </div>
+                <div class="climate-light-info" id="light-info">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/></svg>
+                    <span id="light-schedule">--h luz</span>
+                </div>
+            </div>
+
+            <div class="climate-stages-row" id="stages-row">
+                <!-- Se llena dinamicamente -->
+            </div>
+
+            <div class="climate-decisions" id="climate-decisions">
+                <div class="climate-decision" id="dec-temperature">
+                    <span class="dec-icon temp-icon">T</span>
+                    <span class="dec-text" id="dec-text-temp">---</span>
+                </div>
+                <div class="climate-decision" id="dec-humidity">
+                    <span class="dec-icon hum-icon">H</span>
+                    <span class="dec-text" id="dec-text-hum">---</span>
+                </div>
+                <div class="climate-decision" id="dec-co2">
+                    <span class="dec-icon co2-icon">C</span>
+                    <span class="dec-text" id="dec-text-co2">---</span>
+                </div>
+            </div>
+
+            <div class="climate-thresholds" id="climate-thresholds">
+                <div class="threshold-item"><span class="threshold-label">Temp dia</span><span class="threshold-val" id="th-temp">--</span></div>
+                <div class="threshold-item"><span class="threshold-label">Temp noche</span><span class="threshold-val" id="th-temp-night">--</span></div>
+                <div class="threshold-item"><span class="threshold-label">Humedad</span><span class="threshold-val" id="th-hum">--</span></div>
+                <div class="threshold-item"><span class="threshold-label">CO2</span><span class="threshold-val" id="th-co2">--</span></div>
+                <div class="threshold-item"><span class="threshold-label">VPD</span><span class="threshold-val" id="th-vpd">--</span></div>
+                <div class="threshold-item"><span class="threshold-label">Suelo</span><span class="threshold-val" id="th-soil">--</span></div>
+            </div>
+        </div>
+
         <!-- Mini Chart -->
         <div class="section-title fade-in">Historial (24h)</div>
         <div class="card chart-section fade-in">
@@ -574,6 +621,74 @@ function loadHistory() {
 
 loadHistory();
 window.addEventListener('resize', () => { drawChart(); drawAllSparklines(); });
+
+// ============================================================
+// CLIMATE CONTROLLER
+// ============================================================
+let climateStatus = {};
+
+function updateClimatePanel(data) {
+    climateStatus = data;
+    const modeBtn = document.getElementById('btn-mode');
+    const isAuto = data.mode === 'auto';
+    modeBtn.textContent = isAuto ? 'AUTO' : 'MANUAL';
+    modeBtn.className = 'btn climate-mode-btn ' + (isAuto ? 'mode-auto' : 'mode-manual');
+
+    document.getElementById('stage-label').textContent =
+        (data.stage || '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    document.getElementById('stage-desc').textContent = data.stage_info || '';
+
+    const th = data.thresholds || {};
+    document.getElementById('light-schedule').textContent = (th.light_hours || '--') + 'h luz / ' + (th.dark_hours || '--') + 'h oscuro';
+    document.getElementById('th-temp').textContent = (th.temp_min || '--') + '-' + (th.temp_max || '--') + '\u00B0C';
+    document.getElementById('th-temp-night').textContent = (th.temp_night_min || '--') + '-' + (th.temp_night_max || '--') + '\u00B0C';
+    document.getElementById('th-hum').textContent = (th.hum_min || '--') + '-' + (th.hum_max || '--') + '%';
+    document.getElementById('th-co2').textContent = (th.co2_min || '--') + '-' + (th.co2_max || '--') + ' ppm';
+    document.getElementById('th-vpd').textContent = (th.vpd_min || '--') + '-' + (th.vpd_max || '--') + ' kPa';
+    document.getElementById('th-soil').textContent = (th.soil_hum_min || '--') + '-' + (th.soil_hum_max || '--') + '%';
+
+    // Decisions
+    const dec = data.last_decisions || {};
+    for (const [key, info] of Object.entries(dec)) {
+        const el = document.getElementById('dec-text-' + key.replace('temperature', 'temp'));
+        if (el) {
+            el.textContent = info.detail || info.action || '---';
+            const parent = el.closest('.climate-decision');
+            if (parent) {
+                parent.className = 'climate-decision ' + (info.action === 'ok' ? 'dec-ok' : 'dec-action');
+            }
+        }
+    }
+
+    // Render stage pills
+    renderStages(data.stages || [], data.stage);
+}
+
+function renderStages(stages, currentStage) {
+    const row = document.getElementById('stages-row');
+    if (!stages.length) return;
+    row.innerHTML = stages.map(s => {
+        const active = s === currentStage ? ' stage-active' : '';
+        const label = s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return '<button class="stage-pill' + active + '" onclick="setStage(\'' + s + '\')">' + label + '</button>';
+    }).join('');
+}
+
+function toggleClimateMode() {
+    const newMode = climateStatus.mode === 'auto' ? 'manual' : 'auto';
+    if (newMode === 'auto' && !confirm('Activar control automatico? El sistema controlara los actuadores segun la etapa de cultivo.')) return;
+    socket.emit('set_climate_mode', { mode: newMode });
+}
+
+function setStage(stage) {
+    if (!confirm('Cambiar a etapa: ' + stage.replace(/_/g, ' ') + '?')) return;
+    socket.emit('set_stage', { stage });
+}
+
+socket.on('climate_status', data => updateClimatePanel(data));
+
+// Initial load
+fetch('/api/climate/status').then(r => r.json()).then(updateClimatePanel).catch(() => {});
 
 // ============================================================
 // TOAST NOTIFICATIONS

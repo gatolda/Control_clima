@@ -10,6 +10,8 @@ from core.gpio_setup import inicializar_gpio, limpiar_gpio
 from data.database import Database
 from core.irrigation_manager import IrrigationManager
 from core.camera_manager import CameraManager
+from core.climate_controller import ClimateController
+from data.models import STAGE_THRESHOLDS, STAGE_ORDER
 from dotenv import load_dotenv
 import threading
 import time
@@ -50,6 +52,7 @@ actuator_manager = ActuatorManager(config)
 db = Database()
 irrigation_manager = IrrigationManager(config, sensor_reader, actuator_manager, db)
 camera_manager = CameraManager(config, db)
+climate_controller = ClimateController(config, sensor_reader, actuator_manager, db)
 
 # Ultima lectura de sensores (compartida entre threads)
 latest_sensor_data = {}
@@ -231,6 +234,59 @@ def camera_image(filename):
     from flask import send_from_directory
     return send_from_directory("data/captures", filename)
 
+# --- Climate Controller API ---
+
+@app.route("/api/climate/status")
+@login_required
+def climate_status():
+    return jsonify(climate_controller.get_status())
+
+@app.route("/api/climate/mode", methods=["POST"])
+@login_required
+def climate_set_mode():
+    data = request.get_json()
+    mode = data.get("mode")
+    if mode not in ("auto", "manual"):
+        return jsonify({"ok": False, "error": "Modo debe ser 'auto' o 'manual'"})
+    climate_controller.set_mode(mode)
+    socketio.emit("climate_status", climate_controller.get_status())
+    return jsonify({"ok": True, "mode": mode})
+
+@app.route("/api/climate/stage", methods=["POST"])
+@login_required
+def climate_set_stage():
+    data = request.get_json()
+    stage = data.get("stage")
+    result = climate_controller.set_stage(stage)
+    if result.get("ok"):
+        socketio.emit("climate_status", climate_controller.get_status())
+    return jsonify(result)
+
+@app.route("/api/climate/stages")
+@login_required
+def climate_stages():
+    stages = []
+    for name in STAGE_ORDER:
+        info = STAGE_THRESHOLDS[name]
+        stages.append({
+            "id": name,
+            "descripcion": info.get("descripcion", name),
+            "duracion_dias": info.get("duracion_dias", 0),
+            "light_hours": info.get("light_hours", 18),
+            "temp_range": f"{info['temp_min']}-{info['temp_max']}°C",
+            "hum_range": f"{info['hum_min']}-{info['hum_max']}%",
+        })
+    return jsonify(stages)
+
+@app.route("/api/climate/light", methods=["POST"])
+@login_required
+def climate_set_light():
+    data = request.get_json()
+    light_on_hour = data.get("light_on_hour")
+    if light_on_hour is not None:
+        db.set_config("light_on_hour", str(int(light_on_hour)))
+    return jsonify({"ok": True})
+
 # --- Socket.IO Events ---
 
 @socketio.on("connect")
@@ -259,6 +315,20 @@ def handle_stop_irrigation(data):
     zone_id = data.get("zone_id")
     irrigation_manager.close_valve(zone_id, reason="manual_stop")
     socketio.emit("irrigation_status", irrigation_manager.get_status())
+
+@socketio.on("set_climate_mode")
+def handle_set_climate_mode(data):
+    mode = data.get("mode")
+    if mode in ("auto", "manual"):
+        climate_controller.set_mode(mode)
+        socketio.emit("climate_status", climate_controller.get_status())
+
+@socketio.on("set_stage")
+def handle_set_stage(data):
+    stage = data.get("stage")
+    result = climate_controller.set_stage(stage)
+    if result.get("ok"):
+        socketio.emit("climate_status", climate_controller.get_status())
 
 @socketio.on("toggle_actuador")
 def handle_toggle(data):
@@ -325,6 +395,12 @@ def sensor_background_thread():
             except Exception:
                 pass
 
+            # Emitir estado del controlador climatico
+            try:
+                socketio.emit("climate_status", climate_controller.get_status())
+            except Exception:
+                pass
+
         except Exception as e:
             print(f"Error en lectura de sensores: {e}", flush=True)
 
@@ -340,9 +416,11 @@ if __name__ == "__main__":
         sensor_thread.start()
         irrigation_manager.start()
         camera_manager.start()
+        climate_controller.start()
         print("Dashboard disponible en http://0.0.0.0:5000")
         socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
     finally:
+        climate_controller.stop()
         irrigation_manager.stop()
         camera_manager.stop()
         limpiar_gpio()

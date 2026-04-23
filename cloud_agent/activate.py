@@ -4,6 +4,8 @@ Uso:
     python -m cloud_agent.activate <provisioning_token>
     python -m cloud_agent.activate --api http://server:8000 <token>
 """
+from __future__ import annotations
+
 import argparse
 import logging
 import sys

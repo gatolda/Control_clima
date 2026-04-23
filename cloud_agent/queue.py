@@ -5,6 +5,8 @@ Diseño:
 - El loop del agente lee en batches y los elimina al publicar con exito
 - Si la API responde error, los items quedan en la cola y se reintenta despues
 """
+from __future__ import annotations
+
 import json
 import sqlite3
 import threading

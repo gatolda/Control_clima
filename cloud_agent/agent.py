@@ -8,6 +8,8 @@ Thread model:
 Diseño clave: el control climatico local NO depende del agente. Si el agente
 muere, el ActuatorManager/ClimateController siguen funcionando.
 """
+from __future__ import annotations
+
 import logging
 import threading
 import time

@@ -1,4 +1,6 @@
 """Cliente HTTP hacia el backend SaaS con reintentos y timeouts."""
+from __future__ import annotations
+
 import logging
 from typing import Any
 

@@ -12,6 +12,8 @@ from core.irrigation_manager import IrrigationManager
 from core.camera_manager import CameraManager
 from core.climate_controller import ClimateController
 from data.models import STAGE_THRESHOLDS, STAGE_ORDER
+from cloud_agent.config import AgentConfig
+from cloud_agent.agent import CloudAgent
 from dotenv import load_dotenv
 import threading
 import time
@@ -53,6 +55,48 @@ db = Database()
 irrigation_manager = IrrigationManager(config, sensor_reader, actuator_manager, db)
 camera_manager = CameraManager(config, db)
 climate_controller = ClimateController(config, sensor_reader, actuator_manager, db)
+
+# --- Cloud agent (opcional, se activa si ~/.greenhouse-agent/agent.json existe) ---
+
+def _read_sensors_for_cloud():
+    """Adapta read_all() al formato {variable, sensor_id, value} que espera el backend."""
+    out = []
+    try:
+        data = sensor_reader.read_all()
+        temp = data.get("temperatura_humedad", {}).get("temperature")
+        hum = data.get("temperatura_humedad", {}).get("humidity")
+        co2 = data.get("co2", {}).get("co2")
+        if temp is not None:
+            out.append({"variable": "temperatura", "sensor_id": "dht22_1", "value": float(temp)})
+        if hum is not None:
+            out.append({"variable": "humedad", "sensor_id": "dht22_1", "value": float(hum)})
+        if co2 is not None:
+            out.append({"variable": "co2", "sensor_id": "mhz19", "value": float(co2)})
+        zone_data = sensor_reader.read_zone_data()
+        for zone_id, readings in zone_data.items():
+            for variable, value in readings.items():
+                if value is not None:
+                    out.append({
+                        "variable": variable,
+                        "sensor_id": f"{zone_id}_{variable}",
+                        "value": float(value),
+                    })
+    except Exception as e:
+        print(f"[cloud] error leyendo sensores: {e}", flush=True)
+    return out
+
+def _toggle_actuator_for_cloud(nombre, accion):
+    """Ejecuta un comando remoto contra el actuator_manager."""
+    if accion == "on":
+        return actuator_manager.turn_on(nombre)
+    return actuator_manager.turn_off(nombre)
+
+cloud_config = AgentConfig.load()
+cloud_agent = CloudAgent(
+    config=cloud_config,
+    read_sensors=_read_sensors_for_cloud,
+    toggle_actuator=_toggle_actuator_for_cloud,
+)
 
 # Ultima lectura de sensores (compartida entre threads)
 latest_sensor_data = {}
@@ -343,6 +387,7 @@ def handle_toggle(data):
 
     if result.get("ok"):
         db.log_actuator_event(nombre, accion, triggered_by="manual")
+        cloud_agent.record_actuator_event(nombre, accion, triggered_by="manual")
     else:
         emit("alert", {"type": "conflict", "message": result.get("error", "")})
 
@@ -417,9 +462,11 @@ if __name__ == "__main__":
         irrigation_manager.start()
         camera_manager.start()
         climate_controller.start()
+        cloud_agent.start()  # no-op si no esta activado
         print("Dashboard disponible en http://0.0.0.0:5000")
         socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
     finally:
+        cloud_agent.stop()
         climate_controller.stop()
         irrigation_manager.stop()
         camera_manager.stop()

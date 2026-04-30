@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark" data-density="normal"{% if user.is_authenticated %} data-role="{{ user.role }}"{% endif %}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ciclos — Control Climatico</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <meta name="theme-color" content="#0a0a0b">
+    <script>
+        (function() {
+            const t = localStorage.getItem('theme');
+            const d = localStorage.getItem('density');
+            if (t) document.documentElement.setAttribute('data-theme', t);
+            if (d) document.documentElement.setAttribute('data-density', d);
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    {% include '_sidebar.html' ignore missing %}
+
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+            </div>
+            <div class="sidebar-brand-text">
+                <div class="sidebar-brand-title">Control Climatico</div>
+                <div class="sidebar-brand-subtitle">Invernadero</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="sidebar-nav-section">Monitoreo</div>
+            <a href="/" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+            <a href="/calendar" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Calendario</span></a>
+            <a href="/cycles" class="nav-item active"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg><span>Ciclos</span></a>
+            <a href="/diagnostics" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Diagnosticos</span></a>
+            <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/inventory" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Inventario</span></a>
+            <a href="/settings" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg><span>Ajustes</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            {% if user.is_authenticated %}<span class="role-chip role-{{ user.role }}">{{ user.role }}</span>{% endif %}
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Ciclos de Cultivo</h1>
+                <div class="page-subtitle">Histórico, comparación, métricas</div>
+            </div>
+        </div>
+
+        <section class="section">
+            <div class="section-head"><div class="section-title">Todos los ciclos</div></div>
+            <div class="table-wrap">
+                <table class="data" id="cycles-table">
+                    <thead>
+                        <tr>
+                            <th>Estado</th>
+                            <th>Inicio</th>
+                            <th>Fin</th>
+                            <th>Duración</th>
+                            <th>Temp avg</th>
+                            <th>Hum avg</th>
+                            <th>VPD avg</th>
+                            <th>Riegos</th>
+                            <th>Cosecha (g)</th>
+                            <th>Costo total</th>
+                            <th>$ / g</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cycles-tbody"><tr><td colspan="11" class="text-muted" style="text-align:center;padding:24px;">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+function loadCycles() {
+    fetch('/api/cycles').then(r => r.json()).then(cycles => {
+        const tbody = document.getElementById('cycles-tbody');
+        if (!cycles.length) { tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:24px;">Sin ciclos registrados</td></tr>'; return; }
+        tbody.innerHTML = cycles.map(c => {
+            const end = c.end_date || '—';
+            const dur = c.end_date ? daysBetween(c.start_date, c.end_date) : daysBetween(c.start_date, new Date().toISOString().slice(0,10));
+            const fmt = v => v != null ? Number(v).toFixed(1) : '—';
+            const stats = c.stats || {};
+            const stateChip = c.active
+                ? '<span class="role-chip role-admin">activo</span>'
+                : '<span class="role-chip role-viewer">cerrado</span>';
+            const stage = (c.current_stage || '').replace(/_/g, ' ');
+            return `<tr>
+                <td>${stateChip}</td>
+                <td><code style="font-family:var(--font-mono);">${c.start_date}</code></td>
+                <td><code style="font-family:var(--font-mono);">${end}</code></td>
+                <td>${dur} dias <span class="text-muted" style="font-size:0.7rem;">(${stage})</span></td>
+                <td style="font-family:var(--font-mono);">${fmt(stats.avg_temp)}°</td>
+                <td style="font-family:var(--font-mono);">${fmt(stats.avg_hum)}%</td>
+                <td style="font-family:var(--font-mono);">${stats.avg_vpd != null ? Number(stats.avg_vpd).toFixed(2) : '—'}</td>
+                <td style="font-family:var(--font-mono);">${stats.feeds_count || 0} <span class="text-muted">(${fmt(stats.feeds_total_l)}L)</span></td>
+                <td style="font-family:var(--font-mono);">${c.harvest_dry_g != null ? c.harvest_dry_g + 'g' : '—'}</td>
+                <td style="font-family:var(--font-mono);">${c.costs_total ? '$' + Number(c.costs_total).toLocaleString() : '—'}</td>
+                <td style="font-family:var(--font-mono);font-weight:500;color:var(--accent);">${c.cost_per_gram ? '$' + c.cost_per_gram.toFixed(2) : '—'}</td>
+            </tr>`;
+        }).join('');
+    });
+}
+
+function daysBetween(s, e) {
+    const a = new Date(s + 'T00:00:00');
+    const b = new Date(e + 'T00:00:00');
+    return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+loadCycles();
+</script>
+</body>
+</html>

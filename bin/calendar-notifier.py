@@ -124,6 +124,33 @@ def main() -> None:
             db.mark_event_telegram_sent(ev["id"])
             sent_count += 1
 
+    # 3. Tareas recurrentes con next_run <= hoy
+    rtasks = db.get_due_recurring_tasks()
+    for t in rtasks:
+        # Filtrar por etapa si aplica
+        only = t.get("only_in_stages")
+        if only:
+            try:
+                import json as _json
+                stages = _json.loads(only) if isinstance(only, str) else only
+                if stages and stage not in stages:
+                    continue
+            except Exception:
+                pass
+        title = t["title"]
+        desc = t.get("description") or ""
+        desc_block = f"\n_{desc}_" if desc else ""
+        msg = (
+            f"🔁 *Tarea recurrente* — {title}{desc_block}\n\n"
+            f"https://raspberrypi.taild496a5.ts.net/calendar"
+        )
+        if send_telegram(msg):
+            sent_count += 1
+            # Avanzar next_run
+            if t.get("every_days"):
+                next_date = (today + timedelta(days=int(t["every_days"]))).isoformat()
+                db.advance_recurring_task(t["id"], next_date)
+
     print(f"[notifier] {sent_count} mensajes enviados", flush=True)
 
 

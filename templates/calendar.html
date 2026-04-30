@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calendario — Control Climatico</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icon.svg') }}">
+    <meta name="theme-color" content="#0a0a0b">
     <script>
         (function() {
             const t = localStorage.getItem('theme');
@@ -38,12 +41,20 @@
                 <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 <span>Calendario</span>
             </a>
+            <a href="/cycles" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                <span>Ciclos</span>
+            </a>
             <a href="/diagnostics" class="nav-item">
                 <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 <span>Diagnosticos</span>
             </a>
 
             <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/inventory" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                <span>Inventario</span>
+            </a>
             <a href="/settings" class="nav-item">
                 <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                 <span>Ajustes</span>
@@ -100,6 +111,16 @@ function loadCycle() {
             wireActiveCycle();
             loadEvents();
             loadFeeds();
+            loadPhotos();
+            loadPlants();
+            loadRecurring();
+            loadCosts();
+            // Pre-llenar campos de cosecha si existen
+            if (data.cycle.harvest_wet_g != null) document.getElementById('harv-wet').value = data.cycle.harvest_wet_g;
+            if (data.cycle.harvest_dry_g != null) document.getElementById('harv-dry').value = data.cycle.harvest_dry_g;
+            if (data.cycle.harvest_cured_g != null) document.getElementById('harv-cured').value = data.cycle.harvest_cured_g;
+            if (data.cycle.harvest_notes) document.getElementById('harv-notes').value = data.cycle.harvest_notes;
+            if (data.cycle.harvest_date) document.getElementById('harv-date').value = data.cycle.harvest_date;
         })
         .catch(() => {
             document.getElementById('cycle-container').innerHTML =
@@ -325,6 +346,65 @@ function renderActiveCycle(d) {
                 </div>
             </div>
         </section>
+
+        <section class="section">
+            <div class="section-head">
+                <div class="section-title">Bitacora fotografica</div>
+                ${CAN_WRITE ? '<button class="btn-secondary" onclick="takeSnapshot()" style="font-size:0.75rem;padding:6px 12px;">Tomar foto ahora</button>' : ''}
+            </div>
+            <div class="photos-grid" id="photos-grid"><div class="empty-state">Cargando...</div></div>
+        </section>
+
+        ${CAN_WRITE ? `<section class="section">
+            <div class="section-head"><div class="section-title">Plantas del ciclo</div></div>
+            <div class="event-add" style="grid-template-columns: 1fr 1fr 130px auto;">
+                <div><label class="form-label">Nombre</label><input type="text" class="form-input" id="plant-name" placeholder="ej: Planta 1"></div>
+                <div><label class="form-label">Strain</label><input type="text" class="form-input" id="plant-strain" placeholder="ej: Northern Lights"></div>
+                <div><label class="form-label">Plantada</label><input type="date" class="form-input" id="plant-date" value="${today}"></div>
+                <div style="display:flex;align-items:flex-end;"><button class="btn-primary" onclick="addPlant()">Agregar</button></div>
+            </div>
+            <div class="plants-list" id="plants-list" style="margin-top:12px;"></div>
+        </section>` : ''}
+
+        ${CAN_WRITE ? `<section class="section">
+            <div class="section-head"><div class="section-title">Tareas recurrentes</div></div>
+            <div class="event-add" style="grid-template-columns: 1.5fr 100px 100px 1fr auto;">
+                <div><label class="form-label">Titulo</label><input type="text" class="form-input" id="rt-title" placeholder="ej: Revisar trichomas"></div>
+                <div><label class="form-label">Cada (dias)</label><input type="number" min="1" class="form-input" id="rt-every" value="3"></div>
+                <div><label class="form-label">Proxima</label><input type="date" class="form-input" id="rt-next" value="${today}"></div>
+                <div><label class="form-label">Notas</label><input type="text" class="form-input" id="rt-notes" placeholder="opcional"></div>
+                <div style="display:flex;align-items:flex-end;"><button class="btn-primary" onclick="addRecurring()">Agregar</button></div>
+            </div>
+            <div id="recurring-list" style="margin-top:12px;"></div>
+        </section>` : ''}
+
+        ${CAN_WRITE ? `<section class="section">
+            <div class="section-head"><div class="section-title">Costos del ciclo</div></div>
+            <div class="event-add" style="grid-template-columns: 130px 1fr 130px 1fr auto;">
+                <div><label class="form-label">Fecha</label><input type="date" class="form-input" id="cost-date" value="${today}"></div>
+                <div><label class="form-label">Categoria</label><select class="form-select" id="cost-cat">
+                    <option value="luz">Luz</option><option value="agua">Agua</option><option value="nutrientes">Nutrientes</option>
+                    <option value="sustrato">Sustrato</option><option value="genetica">Genética</option><option value="otro">Otro</option>
+                </select></div>
+                <div><label class="form-label">Monto</label><input type="number" step="0.01" class="form-input" id="cost-amount" placeholder="0.00"></div>
+                <div><label class="form-label">Notas</label><input type="text" class="form-input" id="cost-notes" placeholder="opcional"></div>
+                <div style="display:flex;align-items:flex-end;"><button class="btn-primary" onclick="addCost()">Agregar</button></div>
+            </div>
+            <div class="cost-summary" id="cost-summary" style="margin-top:14px;"></div>
+            <div id="costs-list" style="margin-top:12px;"></div>
+        </section>` : ''}
+
+        ${CAN_WRITE ? `<section class="section">
+            <div class="section-head"><div class="section-title">Cosecha (al cerrar el ciclo)</div></div>
+            <div class="event-add" style="grid-template-columns: 130px 1fr 1fr 1fr auto;">
+                <div><label class="form-label">Fecha</label><input type="date" class="form-input" id="harv-date" value="${today}"></div>
+                <div><label class="form-label">Húmedo (g)</label><input type="number" step="0.1" class="form-input" id="harv-wet" placeholder="0"></div>
+                <div><label class="form-label">Seco (g)</label><input type="number" step="0.1" class="form-input" id="harv-dry" placeholder="0"></div>
+                <div><label class="form-label">Curado (g)</label><input type="number" step="0.1" class="form-input" id="harv-cured" placeholder="0"></div>
+                <div style="display:flex;align-items:flex-end;"><button class="btn-primary" onclick="saveHarvest()">Guardar</button></div>
+            </div>
+            <div style="margin-top:10px;"><input type="text" class="form-input" id="harv-notes" placeholder="Notas de cosecha (opcional)"></div>
+        </section>` : ''}
     `;
 }
 
@@ -505,6 +585,192 @@ function deleteEvent(id) {
     if (!confirm('Eliminar este evento?')) return;
     fetch(`/api/cycle/events/${id}`, {method: 'DELETE'})
         .then(r => r.json()).then(res => { if (res.ok) loadEvents(); });
+}
+
+// ============= Photos =============
+function loadPhotos() {
+    fetch('/api/cycle/photos').then(r=>r.json()).then(photos => {
+        const g = document.getElementById('photos-grid');
+        if (!g) return;
+        if (!photos.length) { g.innerHTML = '<div class="empty-state">Sin fotos. Tomá la primera con el boton de arriba.</div>'; return; }
+        g.innerHTML = photos.map(p => {
+            const stage = (p.stage_at_capture || '').replace(/_/g, ' ');
+            const delBtn = CAN_WRITE
+                ? `<button class="photo-del" onclick="deletePhoto(${p.id})" title="Eliminar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`
+                : '';
+            return `<div class="photo-card">
+                <a href="/api/camera/image/${p.filename}" target="_blank">
+                    <img src="/api/camera/image/${p.filename}" alt="${p.date}" loading="lazy">
+                </a>
+                <div class="photo-meta">
+                    <code>${p.date}</code>
+                    <span>${stage}</span>
+                </div>
+                ${delBtn}
+            </div>`;
+        }).join('');
+    });
+}
+function takeSnapshot() {
+    showToast('Tomando foto...', 'success');
+    fetch('/api/cycle/photos/snapshot', {method:'POST', body: '{}', headers:{'Content-Type':'application/json'}})
+        .then(r=>r.json()).then(res => {
+            if (res.ok) { showToast('Foto guardada', 'success'); loadPhotos(); }
+            else showToast(res.error || 'Error al tomar foto', 'error');
+        });
+}
+function deletePhoto(id) {
+    if (!confirm('Eliminar esta foto?')) return;
+    fetch('/api/cycle/photos/' + id, {method:'DELETE'}).then(r=>r.json()).then(res => { if (res.ok) loadPhotos(); });
+}
+
+// ============= Plants =============
+function loadPlants() {
+    const c = document.getElementById('plants-list');
+    if (!c) return;
+    fetch('/api/cycle/plants').then(r=>r.json()).then(plants => {
+        if (!plants.length) { c.innerHTML = '<div class="empty-state" style="padding:16px 0;">Sin plantas registradas</div>'; return; }
+        c.innerHTML = plants.map(p => {
+            const xSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            return `<div class="plant-row">
+                <strong>${p.name}</strong>
+                <span class="text-muted" style="font-size:0.78rem;">${p.strain || '—'}</span>
+                <code style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-muted);">${p.planted_date || '—'}</code>
+                <button class="event-row-actions danger" onclick="deletePlant(${p.id})" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:24px;height:24px;border-radius:var(--r-sm);cursor:pointer;">${xSvg}</button>
+            </div>`;
+        }).join('');
+    });
+}
+function addPlant() {
+    const payload = {
+        name: document.getElementById('plant-name').value.trim(),
+        strain: document.getElementById('plant-strain').value.trim(),
+        planted_date: document.getElementById('plant-date').value,
+    };
+    if (!payload.name) { showToast('Nombre requerido', 'error'); return; }
+    fetch('/api/cycle/plants', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+        .then(r=>r.json()).then(res => {
+            if (res.ok) { showToast('Planta agregada', 'success');
+                document.getElementById('plant-name').value = '';
+                document.getElementById('plant-strain').value = '';
+                loadPlants();
+            } else showToast(res.error||'Error', 'error');
+        });
+}
+function deletePlant(id) {
+    if (!confirm('Eliminar esta planta?')) return;
+    fetch('/api/cycle/plants/' + id, {method:'DELETE'}).then(r=>r.json()).then(res => { if (res.ok) loadPlants(); });
+}
+
+// ============= Recurring tasks =============
+function loadRecurring() {
+    const c = document.getElementById('recurring-list');
+    if (!c) return;
+    fetch('/api/recurring-tasks').then(r=>r.json()).then(tasks => {
+        if (!tasks.length) { c.innerHTML = '<div class="empty-state" style="padding:16px 0;">Sin tareas recurrentes</div>'; return; }
+        c.innerHTML = tasks.map(t => {
+            const xSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            const cadence = t.every_days ? `cada ${t.every_days}d` : 'manual';
+            return `<div class="plant-row">
+                <strong>${t.title}</strong>
+                <span class="text-muted" style="font-size:0.78rem;">${cadence}</span>
+                <code style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-muted);">próxima: ${t.next_run}</code>
+                <button onclick="deleteRecurring(${t.id})" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:24px;height:24px;border-radius:var(--r-sm);cursor:pointer;">${xSvg}</button>
+            </div>`;
+        }).join('');
+    });
+}
+function addRecurring() {
+    const payload = {
+        title: document.getElementById('rt-title').value.trim(),
+        every_days: document.getElementById('rt-every').value,
+        next_run: document.getElementById('rt-next').value,
+        description: document.getElementById('rt-notes').value,
+        scope: 'cycle',
+    };
+    if (!payload.title || !payload.next_run) { showToast('Titulo y proxima fecha requeridos', 'error'); return; }
+    fetch('/api/recurring-tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+        .then(r=>r.json()).then(res => {
+            if (res.ok) { showToast('Tarea agregada', 'success');
+                document.getElementById('rt-title').value = '';
+                document.getElementById('rt-notes').value = '';
+                loadRecurring();
+            } else showToast(res.error||'Error', 'error');
+        });
+}
+function deleteRecurring(id) {
+    if (!confirm('Eliminar esta tarea?')) return;
+    fetch('/api/recurring-tasks/' + id, {method:'DELETE'}).then(r=>r.json()).then(res => { if (res.ok) loadRecurring(); });
+}
+
+// ============= Costs =============
+function loadCosts() {
+    const list = document.getElementById('costs-list');
+    const summary = document.getElementById('cost-summary');
+    if (!list) return;
+    fetch('/api/cycle/costs').then(r=>r.json()).then(data => {
+        const items = data.items || [];
+        const sum = data.summary || {by_category: {}, total: 0};
+        // Summary chips
+        const cats = Object.entries(sum.by_category || {});
+        if (summary) {
+            summary.innerHTML = cats.length
+                ? `<div class="cost-summary-row">
+                    ${cats.map(([k,v]) => `<span class="cost-chip"><span class="text-muted">${k}</span> $${Number(v).toLocaleString()}</span>`).join('')}
+                    <span class="cost-chip total"><span class="text-muted">TOTAL</span> $${Number(sum.total).toLocaleString()}</span>
+                  </div>`
+                : '';
+        }
+        // List
+        if (!items.length) { list.innerHTML = '<div class="empty-state" style="padding:16px 0;">Sin costos registrados</div>'; return; }
+        list.innerHTML = '<div style="display:grid;grid-template-columns:100px 120px 1fr 120px auto;gap:8px;padding:6px 0;font-size:0.78rem;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);"><div>Fecha</div><div>Categoria</div><div>Notas</div><div style="text-align:right;">Monto</div><div></div></div>' + items.map(c => {
+            const xSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            return `<div style="display:grid;grid-template-columns:100px 120px 1fr 120px auto;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center;">
+                <code style="font-family:var(--font-mono);font-size:0.72rem;">${c.date}</code>
+                <span>${c.category}</span>
+                <span class="text-muted" style="font-size:0.78rem;">${c.notes || ''}</span>
+                <span style="text-align:right;font-family:var(--font-mono);font-weight:500;">$${Number(c.amount).toLocaleString()}</span>
+                <button onclick="deleteCost(${c.id})" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:24px;height:24px;border-radius:var(--r-sm);cursor:pointer;">${xSvg}</button>
+            </div>`;
+        }).join('');
+    });
+}
+function addCost() {
+    const payload = {
+        date: document.getElementById('cost-date').value,
+        category: document.getElementById('cost-cat').value,
+        amount: document.getElementById('cost-amount').value,
+        notes: document.getElementById('cost-notes').value,
+    };
+    if (!payload.date || !payload.amount) { showToast('Fecha y monto requeridos', 'error'); return; }
+    fetch('/api/cycle/costs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+        .then(r=>r.json()).then(res => {
+            if (res.ok) { showToast('Costo registrado', 'success');
+                document.getElementById('cost-amount').value = '';
+                document.getElementById('cost-notes').value = '';
+                loadCosts();
+            } else showToast(res.error||'Error', 'error');
+        });
+}
+function deleteCost(id) {
+    if (!confirm('Eliminar este costo?')) return;
+    fetch('/api/cycle/costs/' + id, {method:'DELETE'}).then(r=>r.json()).then(res => { if (res.ok) loadCosts(); });
+}
+
+// ============= Harvest =============
+function saveHarvest() {
+    const payload = {
+        harvest_date: document.getElementById('harv-date').value,
+        harvest_wet_g: document.getElementById('harv-wet').value,
+        harvest_dry_g: document.getElementById('harv-dry').value,
+        harvest_cured_g: document.getElementById('harv-cured').value,
+        harvest_notes: document.getElementById('harv-notes').value,
+    };
+    fetch('/api/cycle/harvest', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+        .then(r=>r.json()).then(res => {
+            if (res.ok) showToast('Cosecha guardada', 'success');
+            else showToast(res.error||'Error', 'error');
+        });
 }
 
 function showToast(message, type) {

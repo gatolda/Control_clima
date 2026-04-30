@@ -2327,3 +2327,100 @@ table.data code {
 @media (max-width: 900px) {
     .feed-add-bottom { grid-template-columns: 1fr; }
 }
+
+/* Photos grid */
+.photos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+}
+.photo-card {
+    position: relative;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+}
+.photo-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s var(--ease);
+}
+.photo-card:hover img { transform: scale(1.04); }
+.photo-meta {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 8px 10px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    display: flex;
+    justify-content: space-between;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.photo-meta span { text-transform: capitalize; }
+.photo-del {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 24px; height: 24px;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: var(--r-sm);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.photo-card:hover .photo-del { opacity: 1; }
+.photo-del:hover { background: var(--red); border-color: var(--red); }
+
+/* Plants list rows */
+.plant-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 130px auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--r-sm);
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+}
+
+/* Cost summary chips */
+.cost-summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 0;
+}
+.cost-chip {
+    padding: 6px 12px;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+.cost-chip.total {
+    background: var(--accent-dim);
+    border-color: rgba(72,210,143,0.3);
+    color: var(--accent);
+    font-weight: 600;
+}
+.cost-chip .text-muted {
+    margin-right: 6px;
+    text-transform: uppercase;
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+}

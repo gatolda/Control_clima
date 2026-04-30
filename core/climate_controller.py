@@ -46,17 +46,52 @@ class ClimateController:
         self._last_decisions = {}  # cache de ultimas decisiones para logging
         self._light_state = None  # tracking de estado de luz
 
+        # Scheduler de luz: corre SIEMPRE (independiente del modo). El fotoperiodo
+        # es safety-critical (la planta no debe recibir luz fuera de horario).
+        self._light_scheduler_running = False
+        self._light_scheduler_thread = None
+
     def start(self):
-        """Inicia el controlador si el modo es 'auto'."""
+        """Inicia el controlador si el modo es 'auto'.
+        El scheduler de luz se inicia en start_light_scheduler() siempre."""
         mode = self.db.get_config("mode", "manual")
         if mode != "auto":
-            print("ClimateController: modo manual, no inicia")
+            print("ClimateController: modo manual, no inicia control climatico")
             return
 
         self._running = True
         self._thread = threading.Thread(target=self._control_loop, daemon=True)
         self._thread.start()
         print("ClimateController: INICIADO en modo automatico")
+
+    def start_light_scheduler(self):
+        """
+        Inicia el scheduler de luz independiente. Corre siempre, sin importar
+        el modo del climate controller. Si no hay ciclo activo, no hace nada
+        (no toca el rele).
+        """
+        if self._light_scheduler_running:
+            return
+        self._light_scheduler_running = True
+        self._light_scheduler_thread = threading.Thread(
+            target=self._light_scheduler_loop, daemon=True, name="light-scheduler"
+        )
+        self._light_scheduler_thread.start()
+        print("LightScheduler: INICIADO (independiente del modo clima)")
+
+    def _light_scheduler_loop(self):
+        """Loop del scheduler de luz. Solo controla el rele 'luz'."""
+        check_interval = 30  # segundos
+        while self._light_scheduler_running:
+            try:
+                # Solo actuar si hay ciclo activo
+                cycle = self.db.get_active_cycle()
+                if cycle:
+                    stage, thresholds = self.get_current_stage()
+                    self._control_light(thresholds)
+            except Exception as e:
+                print(f"LightScheduler error: {e}")
+            time.sleep(check_interval)
 
     def stop(self):
         """Detiene el controlador."""

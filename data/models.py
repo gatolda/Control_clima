@@ -110,6 +110,76 @@ CREATE TABLE IF NOT EXISTS feed_events (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+-- Fotos del ciclo (bitacora visual)
+CREATE TABLE IF NOT EXISTS cycle_photos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id INTEGER NOT NULL,
+    plant_id INTEGER,
+    date DATE NOT NULL,
+    filename TEXT NOT NULL,
+    stage_at_capture TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (cycle_id) REFERENCES crop_cycles(id)
+);
+
+-- Plantas individuales del ciclo (para tracking per-planta)
+CREATE TABLE IF NOT EXISTS plants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    strain TEXT,
+    planted_date DATE,
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (cycle_id) REFERENCES crop_cycles(id)
+);
+
+-- Inventario de insumos (productos, nutrientes, sustratos)
+CREATE TABLE IF NOT EXISTS supplies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT,           -- 'nutriente', 'sustrato', 'agua', 'pesticida', 'otro'
+    unit TEXT NOT NULL,      -- 'ml', 'g', 'L', 'unidad'
+    current_qty REAL NOT NULL DEFAULT 0,
+    cost_per_unit REAL,      -- en $ (CLP/USD/etc.)
+    expiry_date DATE,
+    low_threshold REAL,      -- alertar cuando current_qty < low_threshold
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+);
+
+-- Costos del ciclo (categorias: luz, agua, nutes, sustrato, otros)
+CREATE TABLE IF NOT EXISTS cycle_costs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id INTEGER NOT NULL,
+    date DATE NOT NULL,
+    category TEXT NOT NULL,
+    amount REAL NOT NULL,
+    notes TEXT,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (cycle_id) REFERENCES crop_cycles(id)
+);
+
+-- Tasks recurrentes (una sola entrada que genera recordatorios cada N dias o ciertos dias)
+-- Cuando se cumple, el notifier lo envia (similar a crop_events) pero no lo "completa",
+-- sino que avanza a la siguiente fecha programada.
+CREATE TABLE IF NOT EXISTS recurring_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id INTEGER,         -- NULL = tarea global, no por ciclo
+    title TEXT NOT NULL,
+    description TEXT,
+    every_days INTEGER,       -- ej: cada 3 dias
+    weekdays TEXT,            -- alternativa: "0,3" para lun y jue (0=lun, 6=dom)
+    only_in_stages TEXT,      -- JSON list: solo en estas etapas
+    next_run DATE NOT NULL,
+    last_sent_at DATETIME,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_sensor_timestamp ON sensor_readings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_timestamp ON actuator_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_user ON actuator_events(user_id);
@@ -121,6 +191,10 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_crop_cycles_active ON crop_cycles(active);
 CREATE INDEX IF NOT EXISTS idx_crop_events_cycle_date ON crop_events(cycle_id, date);
 CREATE INDEX IF NOT EXISTS idx_feed_events_cycle_date ON feed_events(cycle_id, date);
+CREATE INDEX IF NOT EXISTS idx_cycle_photos_cycle_date ON cycle_photos(cycle_id, date);
+CREATE INDEX IF NOT EXISTS idx_plants_cycle ON plants(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_cycle_costs_cycle ON cycle_costs(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_recurring_tasks_next ON recurring_tasks(next_run);
 """
 
 # Roles: admin (todo), operator (controles+config de cultivo, no usuarios), viewer (solo lectura)

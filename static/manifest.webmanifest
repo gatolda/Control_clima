@@ -1,0 +1,19 @@
+{
+    "name": "Control Climatico",
+    "short_name": "Greenhouse",
+    "description": "Control climatico de invernadero - sensores, actuadores, calendario de cultivo",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#0a0a0b",
+    "theme_color": "#0a0a0b",
+    "icons": [
+        {
+            "src": "/static/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ]
+}

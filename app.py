@@ -235,6 +235,16 @@ def sensor_health():
     detailed = sensor_reader.read_all_detailed()
     return jsonify({"health": health, "readings": detailed})
 
+# --- Service worker (PWA) ---
+@app.route("/sw.js")
+def service_worker():
+    """El service worker debe servirse desde la raiz para tener scope completo."""
+    from flask import send_from_directory, make_response
+    resp = make_response(send_from_directory("static", "sw.js"))
+    resp.headers["Content-Type"] = "application/javascript"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
 # --- Health endpoint (publico, para monitoring externo) ---
 @app.route("/health")
 def health():
@@ -776,6 +786,260 @@ def api_feeds_delete(feed_id):
     db.delete_feed_event(feed_id)
     return jsonify({"ok": True})
 
+# --- Photos / camera ---
+
+CAPTURE_DIR = os.path.join(os.path.dirname(__file__), "data", "captures")
+
+@app.route("/api/cycle/photos", methods=["GET"])
+@login_required
+def api_photos_list():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify([])
+    return jsonify(db.list_photos(active["id"]))
+
+@app.route("/api/cycle/photos/snapshot", methods=["POST"])
+@role_required("admin", "operator")
+def api_photo_snapshot():
+    """Toma una foto AHORA con la camara y la asocia al ciclo activo."""
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 400
+    result = camera_manager.capture()
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error", "Camara no disponible")}), 500
+    from datetime import date as _date
+    pid = db.add_photo(
+        cycle_id=active["id"],
+        date=_date.today().isoformat(),
+        filename=result["filename"],
+        stage_at_capture=active["current_stage"],
+    )
+    return jsonify({"ok": True, "photo_id": pid, "filename": result["filename"]})
+
+@app.route("/api/cycle/photos/<int:photo_id>", methods=["DELETE"])
+@role_required("admin", "operator")
+def api_photo_delete(photo_id):
+    row = db.delete_photo(photo_id)
+    # Tambien eliminar el archivo fisico
+    if row and row.get("filename"):
+        path = os.path.join(CAPTURE_DIR, row["filename"])
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+    return jsonify({"ok": True})
+
+# /api/camera/image/<filename> ya existe — sirve los archivos. Lo verifico.
+
+# --- Cycles list + harvest ---
+
+@app.route("/cycles")
+@login_required
+def cycles_page():
+    return render_template("cycles.html")
+
+@app.route("/api/cycles")
+@login_required
+def api_cycles_list():
+    """Lista todos los ciclos con stats agregadas."""
+    out = []
+    for c in db.list_cycles():
+        stats = db.get_cycle_stats(c["id"])
+        costs = db.cost_summary(c["id"])
+        out.append({
+            **c,
+            "stats": {k: v for k, v in (stats or {}).items() if k != "cycle"},
+            "costs_total": costs["total"],
+            "cost_per_gram": (costs["total"] / c["harvest_dry_g"]) if c.get("harvest_dry_g") and costs["total"] else None,
+        })
+    return jsonify(out)
+
+@app.route("/api/cycle/<int:cycle_id>/stats")
+@login_required
+def api_cycle_stats(cycle_id):
+    stats = db.get_cycle_stats(cycle_id)
+    if not stats:
+        return jsonify({"ok": False, "error": "Ciclo no encontrado"}), 404
+    return jsonify(stats)
+
+@app.route("/api/cycle/harvest", methods=["POST"])
+@role_required("admin", "operator")
+def api_cycle_harvest():
+    """Registra datos de cosecha del ciclo activo."""
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 400
+    data = request.get_json() or {}
+    fields = {}
+    for key in ("harvest_wet_g", "harvest_dry_g", "harvest_cured_g"):
+        v = data.get(key)
+        if v not in ("", None):
+            try: fields[key] = float(v)
+            except (TypeError, ValueError): pass
+    if data.get("harvest_notes"): fields["harvest_notes"] = data["harvest_notes"]
+    if data.get("harvest_date"): fields["harvest_date"] = data["harvest_date"]
+    if not fields:
+        return jsonify({"ok": False, "error": "Nada que actualizar"}), 400
+    db.update_cycle_harvest(active["id"], **fields)
+    return jsonify({"ok": True})
+
+# --- Plants ---
+
+@app.route("/api/cycle/plants", methods=["GET"])
+@login_required
+def api_plants_list():
+    active = db.get_active_cycle()
+    if not active: return jsonify([])
+    return jsonify(db.list_plants(active["id"]))
+
+@app.route("/api/cycle/plants", methods=["POST"])
+@role_required("admin", "operator")
+def api_plants_create():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 400
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Nombre requerido"}), 400
+    pid = db.create_plant(
+        cycle_id=active["id"], name=name,
+        strain=data.get("strain"), planted_date=data.get("planted_date"),
+        notes=data.get("notes"),
+    )
+    return jsonify({"ok": True, "plant_id": pid})
+
+@app.route("/api/cycle/plants/<int:plant_id>", methods=["DELETE"])
+@role_required("admin", "operator")
+def api_plants_delete(plant_id):
+    db.delete_plant(plant_id)
+    return jsonify({"ok": True})
+
+# --- Inventario / supplies ---
+
+@app.route("/inventory")
+@login_required
+def inventory_page():
+    return render_template("inventory.html")
+
+@app.route("/api/supplies")
+@login_required
+def api_supplies_list():
+    return jsonify(db.list_supplies())
+
+@app.route("/api/supplies", methods=["POST"])
+@role_required("admin", "operator")
+def api_supplies_create():
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    unit = (data.get("unit") or "").strip()
+    if not name or not unit:
+        return jsonify({"ok": False, "error": "name y unit son requeridos"}), 400
+    def _f(k):
+        v = data.get(k)
+        if v in ("", None): return None
+        try: return float(v)
+        except (TypeError, ValueError): return None
+    sid = db.create_supply(
+        name=name, category=data.get("category", "otro"), unit=unit,
+        current_qty=_f("current_qty") or 0, cost_per_unit=_f("cost_per_unit"),
+        expiry_date=data.get("expiry_date"), low_threshold=_f("low_threshold"),
+        notes=data.get("notes"),
+    )
+    return jsonify({"ok": True, "supply_id": sid})
+
+@app.route("/api/supplies/<int:supply_id>", methods=["PATCH"])
+@role_required("admin", "operator")
+def api_supplies_update(supply_id):
+    data = request.get_json() or {}
+    allowed = {"name", "category", "unit", "current_qty", "cost_per_unit",
+               "expiry_date", "low_threshold", "notes"}
+    fields = {k: v for k, v in data.items() if k in allowed}
+    if fields:
+        db.update_supply(supply_id, **fields)
+    return jsonify({"ok": True})
+
+@app.route("/api/supplies/<int:supply_id>", methods=["DELETE"])
+@role_required("admin", "operator")
+def api_supplies_delete(supply_id):
+    db.delete_supply(supply_id)
+    return jsonify({"ok": True})
+
+# --- Costos del ciclo ---
+
+@app.route("/api/cycle/costs", methods=["GET"])
+@login_required
+def api_costs_list():
+    active = db.get_active_cycle()
+    if not active: return jsonify({"items": [], "summary": {"by_category": {}, "total": 0}})
+    return jsonify({
+        "items": db.list_costs(active["id"]),
+        "summary": db.cost_summary(active["id"]),
+    })
+
+@app.route("/api/cycle/costs", methods=["POST"])
+@role_required("admin", "operator")
+def api_costs_create():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 400
+    data = request.get_json() or {}
+    if not data.get("date") or not data.get("category") or data.get("amount") is None:
+        return jsonify({"ok": False, "error": "date, category, amount requeridos"}), 400
+    try:
+        amount = float(data["amount"])
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "amount invalido"}), 400
+    cid = db.add_cost(
+        cycle_id=active["id"], date=data["date"], category=data["category"],
+        amount=amount, notes=data.get("notes"),
+    )
+    return jsonify({"ok": True, "cost_id": cid})
+
+@app.route("/api/cycle/costs/<int:cost_id>", methods=["DELETE"])
+@role_required("admin", "operator")
+def api_costs_delete(cost_id):
+    db.delete_cost(cost_id)
+    return jsonify({"ok": True})
+
+# --- Recurring tasks ---
+
+@app.route("/api/recurring-tasks", methods=["GET"])
+@login_required
+def api_rtasks_list():
+    return jsonify(db.list_recurring_tasks())
+
+@app.route("/api/recurring-tasks", methods=["POST"])
+@role_required("admin", "operator")
+def api_rtasks_create():
+    data = request.get_json() or {}
+    title = (data.get("title") or "").strip()
+    next_run = data.get("next_run")
+    if not title or not next_run:
+        return jsonify({"ok": False, "error": "title y next_run requeridos"}), 400
+    cycle_id = None
+    if data.get("scope") == "cycle":
+        active = db.get_active_cycle()
+        if active: cycle_id = active["id"]
+    every_days = data.get("every_days")
+    try: every_days = int(every_days) if every_days else None
+    except (TypeError, ValueError): every_days = None
+    tid = db.create_recurring_task(
+        title=title, next_run=next_run, every_days=every_days,
+        weekdays=data.get("weekdays"), cycle_id=cycle_id,
+        description=data.get("description"),
+        only_in_stages=data.get("only_in_stages"),
+    )
+    return jsonify({"ok": True, "task_id": tid})
+
+@app.route("/api/recurring-tasks/<int:task_id>", methods=["DELETE"])
+@role_required("admin", "operator")
+def api_rtasks_delete(task_id):
+    db.delete_recurring_task(task_id)
+    return jsonify({"ok": True})
+
 # --- Socket.IO Events ---
 
 @socketio.on("connect")
@@ -940,6 +1204,8 @@ if __name__ == "__main__":
         irrigation_manager.start()
         camera_manager.start()
         climate_controller.start()
+        # Light scheduler corre SIEMPRE (independiente del modo clima)
+        climate_controller.start_light_scheduler()
         cloud_agent.start()  # no-op si no esta activado
         print("Dashboard disponible en http://0.0.0.0:5000")
         socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)

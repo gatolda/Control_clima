@@ -17,21 +17,29 @@ class Database:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _add_column_if_missing(self, conn, table, col, type_):
+        try:
+            cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+            if cols and col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {type_}")
+        except sqlite3.OperationalError:
+            pass
+
     def _init_db(self):
         conn = self._get_conn()
-        # Pre-migracion: si actuator_events ya existe sin user_id, agregar la columna
-        # ANTES de executescript (que tiene el CREATE INDEX sobre user_id y crashea
-        # si la columna no existe en DBs viejas).
-        try:
-            cols = [r["name"] for r in conn.execute(
-                "PRAGMA table_info(actuator_events)"
-            ).fetchall()]
-            if cols and "user_id" not in cols:
-                conn.execute("ALTER TABLE actuator_events ADD COLUMN user_id INTEGER")
-                conn.commit()
-        except sqlite3.OperationalError:
-            pass  # la tabla aun no existe; SCHEMA la creara con la columna
+        # Pre-migracion: actuator_events.user_id antes del executescript (porque el
+        # SCHEMA tiene CREATE INDEX sobre user_id y crashea en DBs viejas).
+        self._add_column_if_missing(conn, "actuator_events", "user_id", "INTEGER")
+        conn.commit()
         conn.executescript(SCHEMA)
+        # Post-migraciones: columnas nuevas en tablas existentes
+        self._add_column_if_missing(conn, "crop_cycles", "harvest_wet_g", "REAL")
+        self._add_column_if_missing(conn, "crop_cycles", "harvest_dry_g", "REAL")
+        self._add_column_if_missing(conn, "crop_cycles", "harvest_cured_g", "REAL")
+        self._add_column_if_missing(conn, "crop_cycles", "harvest_notes", "TEXT")
+        self._add_column_if_missing(conn, "crop_cycles", "harvest_date", "DATE")
+        self._add_column_if_missing(conn, "crop_events", "plant_id", "INTEGER")
+        self._add_column_if_missing(conn, "feed_events", "plant_id", "INTEGER")
         # Insertar config por defecto si no existe
         for key, value in DEFAULT_CONFIG.items():
             conn.execute(
@@ -404,6 +412,293 @@ class Database:
         conn.execute("DELETE FROM feed_events WHERE id = ?", (feed_id,))
         conn.commit()
         conn.close()
+
+    # --- Cycle photos ---
+
+    def add_photo(self, cycle_id, date, filename, stage_at_capture=None, plant_id=None, notes=None):
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO cycle_photos (cycle_id, plant_id, date, filename, stage_at_capture, notes)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (cycle_id, plant_id, date, filename, stage_at_capture, notes)
+        )
+        conn.commit()
+        pid = cur.lastrowid
+        conn.close()
+        return pid
+
+    def list_photos(self, cycle_id):
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM cycle_photos WHERE cycle_id = ? ORDER BY date DESC, id DESC",
+            (cycle_id,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def delete_photo(self, photo_id):
+        conn = self._get_conn()
+        row = conn.execute("SELECT filename FROM cycle_photos WHERE id = ?", (photo_id,)).fetchone()
+        conn.execute("DELETE FROM cycle_photos WHERE id = ?", (photo_id,))
+        conn.commit()
+        conn.close()
+        return dict(row) if row else None
+
+    # --- Plants ---
+
+    def create_plant(self, cycle_id, name, strain=None, planted_date=None, notes=None):
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO plants (cycle_id, name, strain, planted_date, notes)
+               VALUES (?, ?, ?, ?, ?)""",
+            (cycle_id, name, strain, planted_date, notes)
+        )
+        conn.commit()
+        pid = cur.lastrowid
+        conn.close()
+        return pid
+
+    def list_plants(self, cycle_id, include_inactive=False):
+        conn = self._get_conn()
+        sql = "SELECT * FROM plants WHERE cycle_id = ?"
+        if not include_inactive:
+            sql += " AND active = 1"
+        sql += " ORDER BY id ASC"
+        rows = conn.execute(sql, (cycle_id,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_plant(self, plant_id, **fields):
+        if not fields: return
+        cols = ", ".join(f"{k} = ?" for k in fields.keys())
+        conn = self._get_conn()
+        conn.execute(f"UPDATE plants SET {cols} WHERE id = ?", (*fields.values(), plant_id))
+        conn.commit()
+        conn.close()
+
+    def delete_plant(self, plant_id):
+        conn = self._get_conn()
+        conn.execute("UPDATE plants SET active = 0 WHERE id = ?", (plant_id,))
+        conn.commit()
+        conn.close()
+
+    # --- Supplies (inventario) ---
+
+    def create_supply(self, name, category, unit, current_qty=0, cost_per_unit=None,
+                       expiry_date=None, low_threshold=None, notes=None):
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO supplies
+               (name, category, unit, current_qty, cost_per_unit, expiry_date, low_threshold, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, category, unit, current_qty, cost_per_unit, expiry_date, low_threshold, notes)
+        )
+        conn.commit()
+        sid = cur.lastrowid
+        conn.close()
+        return sid
+
+    def list_supplies(self, include_inactive=False):
+        conn = self._get_conn()
+        sql = "SELECT * FROM supplies"
+        if not include_inactive:
+            sql += " WHERE active = 1"
+        sql += " ORDER BY name"
+        rows = conn.execute(sql).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_supply(self, supply_id, **fields):
+        if not fields: return
+        cols = ", ".join(f"{k} = ?" for k in fields.keys())
+        conn = self._get_conn()
+        conn.execute(f"UPDATE supplies SET {cols} WHERE id = ?", (*fields.values(), supply_id))
+        conn.commit()
+        conn.close()
+
+    def delete_supply(self, supply_id):
+        conn = self._get_conn()
+        conn.execute("UPDATE supplies SET active = 0 WHERE id = ?", (supply_id,))
+        conn.commit()
+        conn.close()
+
+    def consume_supply(self, supply_name, qty):
+        """Resta qty del stock por nombre. Devuelve True si encontro y resto, False si no."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT id, current_qty FROM supplies WHERE name = ? AND active = 1",
+            (supply_name,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return False
+        new_qty = max(0, row["current_qty"] - qty)
+        conn.execute("UPDATE supplies SET current_qty = ? WHERE id = ?", (new_qty, row["id"]))
+        conn.commit()
+        conn.close()
+        return True
+
+    # --- Cycle costs ---
+
+    def add_cost(self, cycle_id, date, category, amount, notes=None):
+        conn = self._get_conn()
+        cur = conn.execute(
+            "INSERT INTO cycle_costs (cycle_id, date, category, amount, notes) VALUES (?, ?, ?, ?, ?)",
+            (cycle_id, date, category, amount, notes)
+        )
+        conn.commit()
+        cid = cur.lastrowid
+        conn.close()
+        return cid
+
+    def list_costs(self, cycle_id):
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM cycle_costs WHERE cycle_id = ? ORDER BY date DESC, id DESC",
+            (cycle_id,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def delete_cost(self, cost_id):
+        conn = self._get_conn()
+        conn.execute("DELETE FROM cycle_costs WHERE id = ?", (cost_id,))
+        conn.commit()
+        conn.close()
+
+    def cost_summary(self, cycle_id):
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT category, SUM(amount) AS total
+               FROM cycle_costs WHERE cycle_id = ? GROUP BY category""",
+            (cycle_id,)
+        ).fetchall()
+        total_row = conn.execute(
+            "SELECT SUM(amount) AS total FROM cycle_costs WHERE cycle_id = ?",
+            (cycle_id,)
+        ).fetchone()
+        conn.close()
+        return {
+            "by_category": {r["category"]: r["total"] for r in rows},
+            "total": total_row["total"] or 0,
+        }
+
+    # --- Recurring tasks ---
+
+    def create_recurring_task(self, title, next_run, every_days=None, weekdays=None,
+                               cycle_id=None, description=None, only_in_stages=None):
+        import json
+        stages_json = json.dumps(only_in_stages) if only_in_stages else None
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO recurring_tasks
+               (cycle_id, title, description, every_days, weekdays, only_in_stages, next_run)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (cycle_id, title, description, every_days, weekdays, stages_json, next_run)
+        )
+        conn.commit()
+        tid = cur.lastrowid
+        conn.close()
+        return tid
+
+    def list_recurring_tasks(self, include_inactive=False):
+        conn = self._get_conn()
+        sql = "SELECT * FROM recurring_tasks"
+        if not include_inactive:
+            sql += " WHERE active = 1"
+        sql += " ORDER BY next_run ASC"
+        rows = conn.execute(sql).fetchall()
+        conn.close()
+        out = []
+        import json
+        for r in rows:
+            d = dict(r)
+            if d.get("only_in_stages"):
+                try: d["only_in_stages"] = json.loads(d["only_in_stages"])
+                except Exception: pass
+            out.append(d)
+        return out
+
+    def delete_recurring_task(self, task_id):
+        conn = self._get_conn()
+        conn.execute("UPDATE recurring_tasks SET active = 0 WHERE id = ?", (task_id,))
+        conn.commit()
+        conn.close()
+
+    def advance_recurring_task(self, task_id, new_next_run):
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE recurring_tasks SET next_run = ?, last_sent_at = datetime('now', 'localtime') WHERE id = ?",
+            (new_next_run, task_id)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_due_recurring_tasks(self):
+        from datetime import date as _date
+        today = _date.today().isoformat()
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM recurring_tasks WHERE active = 1 AND next_run <= ?",
+            (today,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # --- Cycles list + harvest ---
+
+    def list_cycles(self):
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM crop_cycles ORDER BY active DESC, start_date DESC"
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_cycle_harvest(self, cycle_id, **fields):
+        if not fields: return
+        cols = ", ".join(f"{k} = ?" for k in fields.keys())
+        conn = self._get_conn()
+        conn.execute(f"UPDATE crop_cycles SET {cols} WHERE id = ?", (*fields.values(), cycle_id))
+        conn.commit()
+        conn.close()
+
+    def get_cycle_stats(self, cycle_id):
+        """Estadisticas agregadas del ciclo (avg sensor, total feeds, costos)."""
+        conn = self._get_conn()
+        cycle = conn.execute("SELECT * FROM crop_cycles WHERE id = ?", (cycle_id,)).fetchone()
+        if not cycle:
+            conn.close()
+            return None
+        cycle = dict(cycle)
+        # avg sensors entre start y (end o hoy)
+        end = cycle.get("end_date") or "now"
+        avg = conn.execute(
+            """SELECT AVG(temperature) AS avg_temp, AVG(humidity) AS avg_hum,
+                      AVG(co2) AS avg_co2, AVG(vpd) AS avg_vpd
+               FROM sensor_readings
+               WHERE timestamp BETWEEN ? AND ?""",
+            (cycle["start_date"], cycle.get("end_date") or "9999-12-31 23:59:59")
+        ).fetchone()
+        feeds = conn.execute(
+            "SELECT COUNT(*) AS n, SUM(liters) AS total_l FROM feed_events WHERE cycle_id = ?",
+            (cycle_id,)
+        ).fetchone()
+        events = conn.execute(
+            "SELECT COUNT(*) AS n FROM crop_events WHERE cycle_id = ?",
+            (cycle_id,)
+        ).fetchone()
+        conn.close()
+        return {
+            "cycle": cycle,
+            "avg_temp": avg["avg_temp"],
+            "avg_hum": avg["avg_hum"],
+            "avg_co2": avg["avg_co2"],
+            "avg_vpd": avg["avg_vpd"],
+            "feeds_count": feeds["n"],
+            "feeds_total_l": feeds["total_l"] or 0,
+            "events_count": events["n"],
+        }
 
     def get_due_reminders(self):
         """

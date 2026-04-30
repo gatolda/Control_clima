@@ -1,0 +1,10 @@
+[Unit]
+Description=Toma una foto diaria del cultivo a las 12:00 (mediodia, mejor luz)
+
+[Timer]
+OnCalendar=*-*-* 12:00:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

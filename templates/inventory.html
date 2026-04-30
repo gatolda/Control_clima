@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark" data-density="normal"{% if user.is_authenticated %} data-role="{{ user.role }}"{% endif %}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario — Control Climatico</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <meta name="theme-color" content="#0a0a0b">
+    <script>
+        (function() {
+            const t = localStorage.getItem('theme');
+            const d = localStorage.getItem('density');
+            if (t) document.documentElement.setAttribute('data-theme', t);
+            if (d) document.documentElement.setAttribute('data-density', d);
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+            </div>
+            <div class="sidebar-brand-text">
+                <div class="sidebar-brand-title">Control Climatico</div>
+                <div class="sidebar-brand-subtitle">Invernadero</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="sidebar-nav-section">Monitoreo</div>
+            <a href="/" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+            <a href="/calendar" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span>Calendario</span></a>
+            <a href="/cycles" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/></svg><span>Ciclos</span></a>
+            <a href="/diagnostics" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Diagnosticos</span></a>
+            <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/inventory" class="nav-item active"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>Inventario</span></a>
+            <a href="/settings" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg><span>Ajustes</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            {% if user.is_authenticated %}<span class="role-chip role-{{ user.role }}">{{ user.role }}</span>{% endif %}
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Inventario de insumos</h1>
+                <div class="page-subtitle">Productos, stock, vencimientos</div>
+            </div>
+        </div>
+
+        <section class="section">
+            <div class="section-head"><div class="section-title">Agregar insumo</div></div>
+            <div class="event-add" style="grid-template-columns: 1.5fr 1fr 0.7fr 0.8fr 0.9fr 0.8fr 0.9fr auto;">
+                <div><label class="form-label">Nombre</label><input type="text" class="form-input" id="sup-name" placeholder="ej: BloomA"></div>
+                <div><label class="form-label">Categoría</label><select class="form-select" id="sup-category">
+                    <option value="nutriente">Nutriente</option>
+                    <option value="sustrato">Sustrato</option>
+                    <option value="agua">Agua</option>
+                    <option value="pesticida">Pesticida</option>
+                    <option value="otro">Otro</option>
+                </select></div>
+                <div><label class="form-label">Unidad</label><select class="form-select" id="sup-unit">
+                    <option value="ml">ml</option>
+                    <option value="L">L</option>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="unidad">und</option>
+                </select></div>
+                <div><label class="form-label">Stock</label><input type="number" step="0.01" class="form-input" id="sup-qty" placeholder="500"></div>
+                <div><label class="form-label">$ / unidad</label><input type="number" step="0.01" class="form-input" id="sup-cost" placeholder="0.50"></div>
+                <div><label class="form-label">Mínimo</label><input type="number" step="0.01" class="form-input" id="sup-low" placeholder="50"></div>
+                <div><label class="form-label">Vencimiento</label><input type="date" class="form-input" id="sup-expiry"></div>
+                <div style="display:flex;align-items:flex-end;"><button class="btn-primary" onclick="addSupply()">Agregar</button></div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-head"><div class="section-title">Stock actual</div></div>
+            <div class="table-wrap">
+                <table class="data" id="supplies-table">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Categoría</th>
+                            <th style="text-align:right;">Stock</th>
+                            <th style="text-align:right;">$ / und</th>
+                            <th style="text-align:right;">Valor</th>
+                            <th>Vence</th>
+                            <th>Estado</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="supplies-tbody"><tr><td colspan="8" class="text-muted" style="text-align:center;padding:24px;">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const CAN_WRITE = {{ 'true' if user.is_authenticated and user.can_write else 'false' }};
+
+function addSupply() {
+    const payload = {
+        name: document.getElementById('sup-name').value.trim(),
+        category: document.getElementById('sup-category').value,
+        unit: document.getElementById('sup-unit').value,
+        current_qty: document.getElementById('sup-qty').value,
+        cost_per_unit: document.getElementById('sup-cost').value,
+        low_threshold: document.getElementById('sup-low').value,
+        expiry_date: document.getElementById('sup-expiry').value,
+    };
+    if (!payload.name) { showToast('Nombre requerido', 'error'); return; }
+    fetch('/api/supplies', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
+        .then(r=>r.json()).then(res => {
+            if (res.ok) { showToast('Agregado', 'success'); loadSupplies();
+                ['sup-name','sup-qty','sup-cost','sup-low','sup-expiry'].forEach(id => document.getElementById(id).value = '');
+            } else showToast(res.error||'Error', 'error');
+        });
+}
+
+function loadSupplies() {
+    fetch('/api/supplies').then(r=>r.json()).then(supplies => {
+        const tbody = document.getElementById('supplies-tbody');
+        if (!supplies.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:24px;">Sin productos</td></tr>'; return; }
+        const today = new Date().toISOString().slice(0,10);
+        const soon = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
+        tbody.innerHTML = supplies.map(s => {
+            const value = (s.cost_per_unit && s.current_qty) ? '$' + (s.cost_per_unit * s.current_qty).toFixed(2) : '—';
+            let statusBadge = '<span class="role-chip role-admin">OK</span>';
+            if (s.low_threshold != null && s.current_qty <= s.low_threshold) {
+                statusBadge = '<span class="role-chip role-viewer" style="background:var(--amber-dim);color:var(--amber);border-color:rgba(245,158,11,0.35);">BAJO</span>';
+            }
+            if (s.expiry_date) {
+                if (s.expiry_date < today) statusBadge = '<span class="role-chip role-viewer" style="background:var(--red-dim);color:var(--red);">VENCIDO</span>';
+                else if (s.expiry_date < soon) statusBadge = (statusBadge.includes('BAJO') ? statusBadge : '<span class="role-chip role-viewer" style="background:var(--amber-dim);color:var(--amber);border-color:rgba(245,158,11,0.35);">PRONTO</span>');
+            }
+            const xSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            const delBtn = CAN_WRITE ? `<button onclick="deleteSupply(${s.id})" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:24px;height:24px;border-radius:var(--r-sm);cursor:pointer;" title="Eliminar">${xSvg}</button>` : '';
+            return `<tr>
+                <td><strong>${s.name}</strong>${s.notes ? '<div class="text-muted" style="font-size:0.7rem;">'+s.notes+'</div>' : ''}</td>
+                <td><span class="text-muted" style="font-family:var(--font-mono);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;">${s.category||'—'}</span></td>
+                <td style="text-align:right;font-family:var(--font-mono);">${s.current_qty} ${s.unit}</td>
+                <td style="text-align:right;font-family:var(--font-mono);">${s.cost_per_unit != null ? '$'+s.cost_per_unit : '—'}</td>
+                <td style="text-align:right;font-family:var(--font-mono);">${value}</td>
+                <td><code style="font-family:var(--font-mono);font-size:0.72rem;">${s.expiry_date || '—'}</code></td>
+                <td>${statusBadge}</td>
+                <td style="text-align:right;">${delBtn}</td>
+            </tr>`;
+        }).join('');
+    });
+}
+
+function deleteSupply(id) {
+    if (!confirm('Desactivar este insumo?')) return;
+    fetch('/api/supplies/'+id, {method:'DELETE'}).then(r=>r.json()).then(res => {
+        if (res.ok) { showToast('Desactivado', 'success'); loadSupplies(); }
+    });
+}
+
+function showToast(message, type) {
+    const c = document.getElementById('toasts');
+    const t = document.createElement('div');
+    t.className = 'toast ' + (type||'success');
+    t.innerHTML = '<span>'+message+'</span>';
+    c.appendChild(t);
+    setTimeout(()=>{t.style.animation='toast-out 0.25s forwards'; setTimeout(()=>t.remove(),250);},3500);
+}
+
+loadSupplies();
+</script>
+</body>
+</html>

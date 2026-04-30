@@ -1,0 +1,20 @@
+[Unit]
+Description=Greenhouse Watchdog (Telegram alerts)
+After=network-online.target greenhouse.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kowen
+Group=kowen
+WorkingDirectory=/home/kowen/proyectos/Control_clima
+EnvironmentFile=/home/kowen/proyectos/Control_clima/.env
+ExecStart=/usr/bin/python3 /home/kowen/proyectos/Control_clima/bin/greenhouse-watchdog.py
+Restart=on-failure
+RestartSec=15
+
+StandardOutput=append:/var/log/greenhouse-watchdog.log
+StandardError=append:/var/log/greenhouse-watchdog.log
+
+[Install]
+WantedBy=multi-user.target

@@ -29,12 +29,12 @@ sensores:
   humedad_suelo:
     - id: "suelo_h_1"
       tipo: ARDUINO_SERIAL
-      puerto: "/dev/ttyUSB0"
+      puerto: "/dev/arduino-soil"
       zona: "zona_1"
 
 # Arduino hub
 arduino:
-  puerto: "/dev/ttyUSB0"
+  puerto: "/dev/arduino-soil"
   baudrate: 115200
   timeout: 2
 

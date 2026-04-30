@@ -137,6 +137,7 @@ cloud_agent = CloudAgent(
 
 # Ultima lectura de sensores (compartida entre threads)
 latest_sensor_data = {}
+app_started_at = time.time()
 sensor_lock = threading.Lock()
 
 # --- Login ---
@@ -233,6 +234,82 @@ def sensor_health():
     health = sensor_reader.get_sensor_health()
     detailed = sensor_reader.read_all_detailed()
     return jsonify({"health": health, "readings": detailed})
+
+# --- Health endpoint (publico, para monitoring externo) ---
+@app.route("/health")
+def health():
+    """
+    Devuelve el estado general del sistema en JSON.
+    No requiere login para que monitoring externo pueda chequearlo.
+    Status: ok (todo bien), degraded (algo no esta optimo), error (critico).
+    """
+    issues = []
+    components = {}
+
+    # 1. DB
+    try:
+        with sensor_lock:
+            pass  # solo para asegurar que la app no esta deadlocked
+        db.get_config("stage")
+        components["db"] = "ok"
+    except Exception as e:
+        components["db"] = f"error: {e}"
+        issues.append("db")
+
+    # 2. Sensor freshness
+    last_age = None
+    try:
+        with sensor_lock:
+            data = latest_sensor_data or {}
+        ts = data.get("_ts")
+        if ts:
+            last_age = round(time.time() - ts, 1)
+            if last_age > 60:
+                issues.append(f"sensores stale ({last_age}s)")
+                components["sensors"] = f"stale ({last_age}s)"
+            else:
+                components["sensors"] = "ok"
+        else:
+            components["sensors"] = "no_data_yet"
+    except Exception as e:
+        components["sensors"] = f"error: {e}"
+        issues.append("sensors")
+
+    # 3. Sensor health (DHT22, CO2, etc.)
+    try:
+        sh = sensor_reader.get_sensor_health()
+        for name, info in (sh or {}).items():
+            ok = info.get("status") == "ok" or info.get("healthy") is True
+            if not ok:
+                issues.append(f"{name}_unhealthy")
+        components["sensor_health"] = sh
+    except Exception as e:
+        components["sensor_health"] = f"error: {e}"
+
+    # 4. Cloud agent (informativo, no bloquea)
+    components["cloud_agent"] = "active" if cloud_config.is_activated else "disabled"
+
+    # 5. App uptime
+    uptime_s = round(time.time() - app_started_at, 1)
+    components["uptime_seconds"] = uptime_s
+
+    if not issues:
+        status = "ok"
+        http_code = 200
+    elif any(k.startswith("db") for k in issues):
+        status = "error"
+        http_code = 503
+    else:
+        status = "degraded"
+        http_code = 200  # respondemos 200 para no alertar prematuramente, pero el body lo dice
+
+    return jsonify({
+        "status": status,
+        "issues": issues,
+        "components": components,
+        "last_reading_age_seconds": last_age,
+        "timestamp": time.time(),
+    }), http_code
 
 # --- Riego API ---
 
@@ -564,7 +641,8 @@ def sensor_background_thread():
             # Reconstruir datos filtrados
             filtered = {
                 "temperatura_humedad": {"temperature": temp, "humidity": hum},
-                "co2": {"co2": co2}
+                "co2": {"co2": co2},
+                "_ts": time.time(),
             }
 
             with sensor_lock:

@@ -88,6 +88,28 @@ CREATE TABLE IF NOT EXISTS crop_events (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+-- Bitacora estructurada de riego/abono. Un evento aqui puede o no estar
+-- vinculado a un crop_events tag (event_id NULL es un riego sin abono notable).
+-- Permite trazar EC/pH y nutrientes en el tiempo.
+CREATE TABLE IF NOT EXISTS feed_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id INTEGER NOT NULL,
+    crop_event_id INTEGER,
+    date DATE NOT NULL,
+    liters REAL,
+    ec_in REAL,
+    ph_in REAL,
+    ec_runoff REAL,
+    ph_runoff REAL,
+    products TEXT,             -- JSON: [{"nombre":"BloomA","ml":10},{"nombre":"BloomB","ml":10}]
+    notes TEXT,
+    created_by INTEGER,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (cycle_id) REFERENCES crop_cycles(id),
+    FOREIGN KEY (crop_event_id) REFERENCES crop_events(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sensor_timestamp ON sensor_readings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_timestamp ON actuator_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_user ON actuator_events(user_id);
@@ -98,6 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_irrigation_zone ON irrigation_events(zone_id);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_crop_cycles_active ON crop_cycles(active);
 CREATE INDEX IF NOT EXISTS idx_crop_events_cycle_date ON crop_events(cycle_id, date);
+CREATE INDEX IF NOT EXISTS idx_feed_events_cycle_date ON feed_events(cycle_id, date);
 """
 
 # Roles: admin (todo), operator (controles+config de cultivo, no usuarios), viewer (solo lectura)

@@ -2292,3 +2292,38 @@ table.data code {
 }
 
 .cycle-widget.due .cycle-widget-day { color: var(--amber); }
+
+/* Feed (riego/abono) form */
+.feed-add {
+    grid-template-columns: 130px repeat(5, 1fr);
+}
+@media (max-width: 900px) {
+    .feed-add { grid-template-columns: 1fr 1fr; }
+}
+
+.feed-products {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+}
+@media (max-width: 900px) {
+    .feed-products { grid-template-columns: 1fr; }
+}
+
+.feed-product-row {
+    display: grid;
+    grid-template-columns: 1fr 70px;
+    gap: 4px;
+}
+
+.feed-add-bottom {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    margin-top: 10px;
+    align-items: stretch;
+}
+@media (max-width: 900px) {
+    .feed-add-bottom { grid-template-columns: 1fr; }
+}

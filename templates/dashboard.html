@@ -241,6 +241,41 @@
                     </div>
                 </div>
 
+                <!-- VPD -->
+                <div class="sensor fade" id="card-vpd" data-status="none">
+                    <div class="sensor-top">
+                        <div class="sensor-label">
+                            <span class="sensor-icon" style="color: var(--cyan);">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h2"/><path d="M20 12h2"/><path d="M12 2v2"/><path d="M12 20v2"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                            </span>
+                            <span class="sensor-name">VPD</span>
+                        </div>
+                        <span class="badge none" id="badge-vpd">--</span>
+                    </div>
+                    <div class="sensor-readout">
+                        <span class="sensor-value" id="val-vpd">--</span>
+                        <span class="sensor-unit">kPa</span>
+                    </div>
+                    <div class="sensor-updated" id="upd-vpd">hace --</div>
+                    <div>
+                        <div class="gauge">
+                            <div class="gauge-optimal" id="opt-vpd" style="left: 27%; width: 13%;"></div>
+                            <div class="gauge-fill good" id="bar-vpd" style="width: 0%"></div>
+                        </div>
+                        <div class="gauge-scale">
+                            <span>0</span>
+                            <span>2.5 kPa</span>
+                        </div>
+                    </div>
+                    <div class="spark">
+                        <canvas id="spark-vpd"></canvas>
+                    </div>
+                    <div class="spark-meta">
+                        <span class="label">live</span>
+                        <span id="minmax-vpd">-- / --</span>
+                    </div>
+                </div>
+
                 <!-- Soil Humidity -->
                 <div class="sensor fade" id="card-soil" data-status="none">
                     <div class="sensor-top">
@@ -480,7 +515,7 @@ setInterval(loadCycleWidget, 60000); // refrescar cada minuto
 // ============================================================
 // LAST-UPDATE TRACKING per sensor
 // ============================================================
-const lastUpdate = { temp: 0, hum: 0, co2: 0, soil: 0 };
+const lastUpdate = { temp: 0, hum: 0, co2: 0, soil: 0, vpd: 0 };
 
 // ============================================================
 // CLOCK + UPTIME
@@ -507,7 +542,7 @@ tick(); setInterval(tick, 1000);
 function markUpdate(key) { lastUpdate[key] = Date.now(); }
 
 function updateSensorUpdatedLabels() {
-    ['temp', 'hum', 'co2', 'soil'].forEach(k => {
+    ['temp', 'hum', 'co2', 'soil', 'vpd'].forEach(k => {
         const el = document.getElementById('upd-' + k);
         if (!el) return;
         const ts = lastUpdate[k];
@@ -591,6 +626,29 @@ function updateSensors(data) {
         }
     }
 
+    if (data.vpd) {
+        const vpd = data.vpd.vpd;
+        if (vpd !== null && vpd !== undefined && vpd >= 0 && vpd <= 5) {
+            document.getElementById('val-vpd').textContent = vpd.toFixed(2);
+            const pct = Math.min(100, Math.max(0, (vpd / 2.5) * 100));
+            document.getElementById('bar-vpd').style.width = pct + '%';
+
+            let status, badgeText;
+            if (vpd < 0.4)       { status = 'cold'; badgeText = 'Bajo'; }
+            else if (vpd <= 1.5) { status = 'good'; badgeText = 'Optimo'; }
+            else if (vpd <= 2.0) { status = 'warn'; badgeText = 'Alto'; }
+            else                 { status = 'hot';  badgeText = 'Critico'; }
+
+            document.getElementById('card-vpd').dataset.status = status;
+            document.getElementById('bar-vpd').className = 'gauge-fill ' + status;
+            const badge = document.getElementById('badge-vpd');
+            badge.textContent = badgeText;
+            badge.className = 'badge ' + status;
+            markUpdate('vpd');
+            pushChartPoint('vpd', vpd);
+        }
+    }
+
     if (data.co2) {
         const co2 = data.co2.co2;
         if (co2 !== null && co2 !== undefined && co2 >= 0 && co2 <= 5000) {
@@ -619,7 +677,7 @@ function updateSensors(data) {
 // Sparklines use a short live buffer so each new reading is visible
 const SPARK_MAX = 60;              // last ~3min @ 3s
 const CHART_MAX_POINTS = 288;      // 24h buffer for main chart
-const liveSpark = { temp: [], hum: [], co2: [] };
+const liveSpark = { temp: [], hum: [], co2: [], vpd: [] };
 let redrawScheduled = false;
 
 function pushChartPoint(key, value) {
@@ -920,6 +978,12 @@ function drawAllSparklines() {
         drawSparkline('spark-co2', co2Pts, 'rgb(167, 139, 250)',
             Math.min(...co2Pts) - 5, Math.max(...co2Pts) + 5);
         updateMinMax('minmax-co2', chartData.co2, 'ppm');
+    }
+    const vpdPts = liveSpark.vpd.length > 1 ? liveSpark.vpd : null;
+    if (vpdPts) {
+        drawSparkline('spark-vpd', vpdPts, 'rgb(102, 217, 232)',
+            Math.min(...vpdPts) - 0.05, Math.max(...vpdPts) + 0.05);
+        updateMinMax('minmax-vpd', vpdPts, 'kPa');
     }
 }
 

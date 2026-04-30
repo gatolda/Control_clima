@@ -716,6 +716,66 @@ def api_event_delete(event_id):
 def api_event_types():
     return jsonify(list(CROP_EVENT_TYPES))
 
+# --- Feed events (riego/abono estructurado, EC/pH manual) ---
+
+@app.route("/api/cycle/feeds", methods=["GET"])
+@login_required
+def api_feeds_list():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify([])
+    days = request.args.get("days", 60, type=int)
+    return jsonify(db.list_feed_events(active["id"], days_past=days))
+
+@app.route("/api/cycle/feeds", methods=["POST"])
+@role_required("admin", "operator")
+def api_feeds_create():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 400
+    data = request.get_json() or {}
+    if not data.get("date"):
+        return jsonify({"ok": False, "error": "date requerido"}), 400
+
+    def _f(k):
+        v = data.get(k)
+        if v == "" or v is None: return None
+        try: return float(v)
+        except (TypeError, ValueError): return None
+
+    products = data.get("products")
+    if products and isinstance(products, list):
+        # Validar estructura minima
+        products = [{"nombre": p.get("nombre", ""), "ml": p.get("ml")} for p in products if p.get("nombre")]
+
+    # Si tiene productos -> tambien crear evento "abono" en el calendario
+    crop_event_id = None
+    if products:
+        try:
+            crop_event_id = db.create_crop_event(
+                cycle_id=active["id"], date=data["date"], event_type="abono",
+                notes=", ".join(f"{p['nombre']} {p.get('ml','')}ml" for p in products[:3]),
+                created_by=getattr(current_user, "user_id", None),
+            )
+        except Exception:
+            pass
+
+    fid = db.create_feed_event(
+        cycle_id=active["id"], date=data["date"],
+        liters=_f("liters"), ec_in=_f("ec_in"), ph_in=_f("ph_in"),
+        ec_runoff=_f("ec_runoff"), ph_runoff=_f("ph_runoff"),
+        products=products, notes=data.get("notes"),
+        crop_event_id=crop_event_id,
+        created_by=getattr(current_user, "user_id", None),
+    )
+    return jsonify({"ok": True, "feed_id": fid, "crop_event_id": crop_event_id})
+
+@app.route("/api/cycle/feeds/<int:feed_id>", methods=["DELETE"])
+@role_required("admin", "operator")
+def api_feeds_delete(feed_id):
+    db.delete_feed_event(feed_id)
+    return jsonify({"ok": True})
+
 # --- Socket.IO Events ---
 
 @socketio.on("connect")
@@ -819,10 +879,21 @@ def sensor_background_thread():
             if co2 is not None and (co2 <= 0 or co2 > 5000):
                 co2 = None
 
+            # Calcular VPD (Vapor Pressure Deficit) para que el frontend lo muestre
+            vpd = None
+            if temp is not None and hum is not None:
+                try:
+                    import math
+                    svp = 0.6108 * math.exp((17.27 * temp) / (temp + 237.3))
+                    vpd = round(svp * (1 - hum / 100.0), 2)
+                except Exception:
+                    vpd = None
+
             # Reconstruir datos filtrados
             filtered = {
                 "temperatura_humedad": {"temperature": temp, "humidity": hum},
                 "co2": {"co2": co2},
+                "vpd": {"vpd": vpd},
                 "_ts": time.time(),
             }
 

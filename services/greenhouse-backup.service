@@ -1,0 +1,14 @@
+[Unit]
+Description=Greenhouse SQLite backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=kowen
+Group=kowen
+WorkingDirectory=/home/kowen/proyectos/Control_clima
+EnvironmentFile=-/home/kowen/proyectos/Control_clima/.env
+ExecStart=/bin/bash /home/kowen/proyectos/Control_clima/bin/backup-db.sh
+
+StandardOutput=append:/var/log/greenhouse-backup.log
+StandardError=append:/var/log/greenhouse-backup.log

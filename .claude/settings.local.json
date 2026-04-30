@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh kowen@192.168.100.8 \"cat ~/proyectos/Control_clima/sensor_reader.py\")"
+    ]
+  }
+}

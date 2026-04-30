@@ -99,6 +99,7 @@ function loadCycle() {
             c.innerHTML = renderActiveCycle(data);
             wireActiveCycle();
             loadEvents();
+            loadFeeds();
         })
         .catch(() => {
             document.getElementById('cycle-container').innerHTML =
@@ -261,6 +262,57 @@ function renderActiveCycle(d) {
             ${quickAddHtml}
         </section>` : ''}
 
+        ${CAN_WRITE ? `<section class="section">
+            <div class="section-head"><div class="section-title">Riego / Abono — bitacora</div></div>
+            <div class="event-add feed-add">
+                <div><label class="form-label">Fecha</label><input type="date" class="form-input" id="feed-date" value="${today}"></div>
+                <div><label class="form-label">Litros</label><input type="number" step="0.1" class="form-input" id="feed-liters" placeholder="ej: 5"></div>
+                <div><label class="form-label">EC entrada</label><input type="number" step="0.01" class="form-input" id="feed-ec-in" placeholder="1.6"></div>
+                <div><label class="form-label">pH entrada</label><input type="number" step="0.01" class="form-input" id="feed-ph-in" placeholder="5.8"></div>
+                <div><label class="form-label">EC runoff</label><input type="number" step="0.01" class="form-input" id="feed-ec-out" placeholder="1.4"></div>
+                <div><label class="form-label">pH runoff</label><input type="number" step="0.01" class="form-input" id="feed-ph-out" placeholder="6.0"></div>
+            </div>
+            <div class="feed-products" id="feed-products">
+                <div class="feed-product-row">
+                    <input type="text" class="form-input" placeholder="Producto (ej: BloomA)" data-feed-name>
+                    <input type="number" step="0.1" class="form-input" placeholder="ml" data-feed-ml>
+                </div>
+                <div class="feed-product-row">
+                    <input type="text" class="form-input" placeholder="Producto" data-feed-name>
+                    <input type="number" step="0.1" class="form-input" placeholder="ml" data-feed-ml>
+                </div>
+                <div class="feed-product-row">
+                    <input type="text" class="form-input" placeholder="Producto" data-feed-name>
+                    <input type="number" step="0.1" class="form-input" placeholder="ml" data-feed-ml>
+                </div>
+            </div>
+            <div class="feed-add-bottom">
+                <input type="text" class="form-input" id="feed-notes" placeholder="Notas (opcional)">
+                <button class="btn-primary" onclick="addFeed()">Registrar riego</button>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-head"><div class="section-title">Historico de riegos (60 dias)</div></div>
+            <div class="table-wrap">
+                <table class="data" id="feeds-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th style="text-align: right;">Litros</th>
+                            <th style="text-align: right;">EC in</th>
+                            <th style="text-align: right;">pH in</th>
+                            <th style="text-align: right;">EC out</th>
+                            <th style="text-align: right;">pH out</th>
+                            <th>Productos</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="feeds-tbody"><tr><td colspan="8" class="text-muted" style="text-align:center;padding:24px;">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+        </section>` : ''}
+
         <section class="section">
             <div class="events-grid">
                 <div>
@@ -303,6 +355,77 @@ function addEvent() {
             loadEvents();
         } else showToast(res.error || 'Error', 'error');
     });
+}
+
+function addFeed() {
+    const products = [];
+    document.querySelectorAll('.feed-product-row').forEach(row => {
+        const name = row.querySelector('[data-feed-name]').value.trim();
+        const ml = row.querySelector('[data-feed-ml]').value.trim();
+        if (name) products.push({nombre: name, ml: ml ? parseFloat(ml) : null});
+    });
+    const payload = {
+        date: document.getElementById('feed-date').value,
+        liters: document.getElementById('feed-liters').value,
+        ec_in: document.getElementById('feed-ec-in').value,
+        ph_in: document.getElementById('feed-ph-in').value,
+        ec_runoff: document.getElementById('feed-ec-out').value,
+        ph_runoff: document.getElementById('feed-ph-out').value,
+        notes: document.getElementById('feed-notes').value,
+        products: products,
+    };
+    if (!payload.date) { showToast('Fecha requerida', 'error'); return; }
+    fetch('/api/cycle/feeds', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+    })
+    .then(r => r.json()).then(res => {
+        if (res.ok) {
+            showToast('Riego registrado', 'success');
+            // Limpiar
+            ['feed-liters','feed-ec-in','feed-ph-in','feed-ec-out','feed-ph-out','feed-notes'].forEach(id => document.getElementById(id).value = '');
+            document.querySelectorAll('.feed-product-row input').forEach(i => i.value = '');
+            loadFeeds();
+            loadEvents(); // por si se creo un crop_event abono
+        } else showToast(res.error || 'Error', 'error');
+    });
+}
+
+function loadFeeds() {
+    const tbody = document.getElementById('feeds-tbody');
+    if (!tbody) return;
+    fetch('/api/cycle/feeds?days=60')
+        .then(r => r.json())
+        .then(feeds => {
+            if (!Array.isArray(feeds) || feeds.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:24px;">Sin riegos registrados</td></tr>';
+                return;
+            }
+            tbody.innerHTML = feeds.map(f => {
+                const fmt = v => v != null ? Number(v).toFixed(2) : '—';
+                const productos = Array.isArray(f.products)
+                    ? f.products.map(p => `${p.nombre}${p.ml ? ' ' + p.ml + 'ml' : ''}`).join(', ')
+                    : (f.products || '');
+                const xSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                return `<tr>
+                    <td><code style="font-family:var(--font-mono);font-size:0.78rem;">${f.date}</code></td>
+                    <td style="text-align:right;font-family:var(--font-mono);">${f.liters != null ? f.liters + ' L' : '—'}</td>
+                    <td style="text-align:right;font-family:var(--font-mono);">${fmt(f.ec_in)}</td>
+                    <td style="text-align:right;font-family:var(--font-mono);">${fmt(f.ph_in)}</td>
+                    <td style="text-align:right;font-family:var(--font-mono);color:var(--text-secondary);">${fmt(f.ec_runoff)}</td>
+                    <td style="text-align:right;font-family:var(--font-mono);color:var(--text-secondary);">${fmt(f.ph_runoff)}</td>
+                    <td style="font-size:0.78rem;color:var(--text-secondary);">${productos || '—'}${f.notes ? '<div style="color:var(--text-muted);font-size:0.72rem;">' + f.notes + '</div>' : ''}</td>
+                    <td style="text-align:right;"><button class="event-row-actions" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:24px;height:24px;border-radius:var(--r-sm);cursor:pointer;" onclick="deleteFeed(${f.id})">${xSvg}</button></td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+function deleteFeed(id) {
+    if (!confirm('Eliminar este registro?')) return;
+    fetch('/api/cycle/feeds/' + id, {method: 'DELETE'})
+        .then(r => r.json()).then(res => { if (res.ok) loadFeeds(); });
 }
 
 function loadEvents() {

@@ -353,6 +353,58 @@ class Database:
         conn.commit()
         conn.close()
 
+    # --- Feed events (bitacora de riego/abono estructurada) ---
+
+    def create_feed_event(self, cycle_id, date, liters=None, ec_in=None, ph_in=None,
+                          ec_runoff=None, ph_runoff=None, products=None, notes=None,
+                          crop_event_id=None, created_by=None):
+        """Registra un riego/abono. products es lista de dicts [{nombre, ml}], se serializa a JSON."""
+        import json
+        products_json = json.dumps(products) if products else None
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO feed_events
+               (cycle_id, crop_event_id, date, liters, ec_in, ph_in, ec_runoff, ph_runoff,
+                products, notes, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (cycle_id, crop_event_id, date, liters, ec_in, ph_in, ec_runoff, ph_runoff,
+             products_json, notes, created_by)
+        )
+        conn.commit()
+        eid = cur.lastrowid
+        conn.close()
+        return eid
+
+    def list_feed_events(self, cycle_id, days_past=30, days_future=0):
+        from datetime import date as _date, timedelta as _td
+        today = _date.today()
+        start = (today - _td(days=days_past)).isoformat()
+        end = (today + _td(days=days_future)).isoformat()
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT f.*, u.username FROM feed_events f
+               LEFT JOIN users u ON u.id = f.created_by
+               WHERE f.cycle_id = ? AND f.date >= ? AND f.date <= ?
+               ORDER BY f.date DESC, f.id DESC""",
+            (cycle_id, start, end)
+        ).fetchall()
+        conn.close()
+        out = []
+        import json
+        for r in rows:
+            d = dict(r)
+            if d.get("products"):
+                try: d["products"] = json.loads(d["products"])
+                except Exception: pass
+            out.append(d)
+        return out
+
+    def delete_feed_event(self, feed_id):
+        conn = self._get_conn()
+        conn.execute("DELETE FROM feed_events WHERE id = ?", (feed_id,))
+        conn.commit()
+        conn.close()
+
     def get_due_reminders(self):
         """
         Eventos que necesitan recordatorio Telegram:

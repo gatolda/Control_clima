@@ -1,137 +1,122 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark" data-density="normal"{% if user.is_authenticated %} data-role="{{ user.role }}"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Diagnosticos — Control Climatico</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icon.svg') }}">
+    <meta name="theme-color" content="#0a0a0b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+        (function() {
+            const t = localStorage.getItem('theme');
+            const d = localStorage.getItem('density');
+            if (t) document.documentElement.setAttribute('data-theme', t);
+            if (d) document.documentElement.setAttribute('data-density', d);
+        })();
+    </script>
 </head>
 <body>
 <div class="app-shell">
 
-    <!-- ===== TOP BAR ===== -->
-    <nav class="topbar">
-        <div class="topbar-brand">
-            <div class="topbar-logo">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
             </div>
+            <div class="sidebar-brand-text">
+                <div class="sidebar-brand-title">Control Climatico</div>
+                <div class="sidebar-brand-subtitle">Invernadero</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="sidebar-nav-section">Monitoreo</div>
+            <a href="/" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+            <a href="/calendar" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span>Calendario</span></a>
+            <a href="/cycles" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/></svg><span>Ciclos</span></a>
+            <a href="/diagnostics" class="nav-item active"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Diagnosticos</span></a>
+            <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/inventory" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>Inventario</span></a>
+            <a href="/settings" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg><span>Ajustes</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="status-dot" id="conn-dot"></div>
+            <span class="status-text" id="conn-text">Conectando</span>
+            {% if user.is_authenticated %}<span class="role-chip role-{{ user.role }}">{{ user.role }}</span>{% endif %}
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
             <div>
-                <div class="topbar-title">Control Climatico</div>
-                <div class="topbar-subtitle">Invernadero</div>
+                <h1 class="page-title">Diagnósticos del Sistema</h1>
+                <div class="page-subtitle">Estado de salud de sensores, lecturas detalladas y registro de eventos</div>
             </div>
+            <button class="btn-secondary" onclick="refreshAll()">Actualizar</button>
         </div>
 
-        <div class="topbar-nav">
-            <a href="/" class="nav-tab">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                <span>Dashboard</span>
-            </a>
-            <a href="/calendar" class="nav-tab">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                <span>Calendario</span>
-            </a>
-            <a href="/diagnostics" class="nav-tab active">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                <span>Diagnosticos</span>
-            </a>
-            <a href="/settings" class="nav-tab">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                <span>Ajustes</span>
-            </a>
-        </div>
-
-        <div class="topbar-status">
-            <div class="status-indicator" id="conn-dot"></div>
-            <span class="status-text" id="conn-text">Conectando...</span>
-        </div>
-    </nav>
-
-    <!-- ===== MAIN ===== -->
-    <main class="main-content">
-
-        <div class="page-header fade-in">
-            <h1>Diagnosticos del Sistema</h1>
-            <p>Estado de salud de sensores, lecturas detalladas y registro de eventos</p>
-        </div>
-
-        <!-- Sensor Health -->
-        <div class="section-title fade-in">Estado de Sensores</div>
-        <div class="health-grid" id="health-grid">
-            <div class="health-card card fade-in">
-                <div class="health-indicator" id="health-temp">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z"/></svg>
+        <section class="section">
+            <div class="section-head"><div class="section-title">Estado de sensores</div></div>
+            <div class="health-grid">
+                <div class="health">
+                    <div class="health-dot" id="health-temp">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0z"/></svg>
+                    </div>
+                    <div class="health-info">
+                        <h3>Temperatura (DHT22)</h3>
+                        <p id="health-temp-detail">Verificando...</p>
+                    </div>
                 </div>
-                <div class="health-info">
-                    <h3>Temperatura (DHT22)</h3>
-                    <p id="health-temp-detail">Verificando...</p>
+                <div class="health">
+                    <div class="health-dot" id="health-hum">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+                    </div>
+                    <div class="health-info">
+                        <h3>Humedad (DHT22)</h3>
+                        <p id="health-hum-detail">Verificando...</p>
+                    </div>
+                </div>
+                <div class="health">
+                    <div class="health-dot" id="health-co2">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                    </div>
+                    <div class="health-info">
+                        <h3>CO2 (MH-Z19D)</h3>
+                        <p id="health-co2-detail">Verificando...</p>
+                    </div>
                 </div>
             </div>
-            <div class="health-card card fade-in">
-                <div class="health-indicator" id="health-hum">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
-                </div>
-                <div class="health-info">
-                    <h3>Humedad (DHT22)</h3>
-                    <p id="health-hum-detail">Verificando...</p>
-                </div>
+        </section>
+
+        <section class="section">
+            <div class="section-head"><div class="section-title">Lecturas detalladas</div></div>
+            <div class="table-wrap">
+                <table class="data" id="readings-table">
+                    <thead>
+                        <tr><th>Sensor</th><th>ID</th><th>Valor</th><th>Estado</th><th>Ubicación</th></tr>
+                    </thead>
+                    <tbody id="readings-body">
+                        <tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Cargando datos...</td></tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="health-card card fade-in">
-                <div class="health-indicator" id="health-co2">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><path d="M7 12h3"/><path d="M14 12h3"/></svg>
-                </div>
-                <div class="health-info">
-                    <h3>CO2 (MH-Z19D)</h3>
-                    <p id="health-co2-detail">Verificando...</p>
-                </div>
+        </section>
+
+        <section class="section">
+            <div class="section-head"><div class="section-title">Registro de eventos (24h)</div></div>
+            <div class="table-wrap">
+                <table class="data" id="events-table">
+                    <thead>
+                        <tr><th>Hora</th><th>Actuador</th><th>Acción</th><th>Disparado por</th><th>Usuario</th></tr>
+                    </thead>
+                    <tbody id="events-body">
+                        <tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Cargando eventos...</td></tr>
+                    </tbody>
+                </table>
             </div>
-        </div>
-
-        <!-- Current Detailed Readings -->
-        <div class="section-title fade-in">Lecturas Detalladas</div>
-        <div class="card fade-in" style="overflow-x: auto;">
-            <table class="event-log" id="readings-table">
-                <thead>
-                    <tr>
-                        <th>Sensor</th>
-                        <th>ID</th>
-                        <th>Valor</th>
-                        <th>Estado</th>
-                        <th>Ubicacion</th>
-                    </tr>
-                </thead>
-                <tbody id="readings-body">
-                    <tr><td colspan="5" class="text-muted" style="text-align: center; padding: 30px;">Cargando datos...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Actuator Event Log -->
-        <div class="section-title fade-in mt-4">Registro de Eventos (24h)</div>
-        <div class="card fade-in" style="overflow-x: auto;">
-            <table class="event-log" id="events-table">
-                <thead>
-                    <tr>
-                        <th>Hora</th>
-                        <th>Actuador</th>
-                        <th>Accion</th>
-                        <th>Disparado por</th>
-                        <th>Usuario</th>
-                    </tr>
-                </thead>
-                <tbody id="events-body">
-                    <tr><td colspan="5" class="text-muted" style="text-align: center; padding: 30px;">Cargando eventos...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="gap-row mt-4 fade-in">
-            <button class="btn-secondary" onclick="refreshAll()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 6px;"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
-                Actualizar
-            </button>
-        </div>
-
+        </section>
     </main>
 </div>
 
@@ -141,16 +126,14 @@
 const socket = io();
 
 socket.on('connect', () => {
-    document.getElementById('conn-dot').className = 'status-indicator online';
+    document.getElementById('conn-dot').className = 'status-dot online';
     document.getElementById('conn-text').textContent = 'En linea';
 });
-
 socket.on('disconnect', () => {
-    document.getElementById('conn-dot').className = 'status-indicator offline';
+    document.getElementById('conn-dot').className = 'status-dot offline';
     document.getElementById('conn-text').textContent = 'Desconectado';
 });
 
-// --- Sensor Health ---
 function loadSensorHealth() {
     fetch('/api/sensor-health')
         .then(r => r.json())
@@ -158,95 +141,91 @@ function loadSensorHealth() {
             const health = data.health || {};
             const readings = data.readings || {};
 
-            // Update health indicators
-            updateHealthCard('health-temp', 'health-temp-detail', health.temperatura, 'Temperatura');
-            updateHealthCard('health-hum', 'health-hum-detail', health.humedad, 'Humedad');
-            updateHealthCard('health-co2', 'health-co2-detail', health.co2, 'CO2');
+            updateHealthCard('health-temp', 'health-temp-detail', health.temperatura);
+            updateHealthCard('health-hum', 'health-hum-detail', health.humedad);
+            updateHealthCard('health-co2', 'health-co2-detail', health.co2);
 
-            // Update readings table
             const tbody = document.getElementById('readings-body');
             let rows = '';
-
-            if (readings.temperatura_humedad) {
-                const th = readings.temperatura_humedad;
+            const th = readings.temperatura_humedad || {};
+            const c = readings.co2 || {};
+            if (th.temperature != null) {
                 rows += buildReadingRow('Temperatura', th.sensor_id || 'dht22_1',
-                    th.temperature != null ? th.temperature.toFixed(1) + ' C' : 'N/A',
-                    th.temperature != null ? 'Activo' : 'Sin datos', 'centro');
+                    th.temperature.toFixed(1) + ' °C', 'Activo', 'centro');
+            } else {
+                rows += buildReadingRow('Temperatura', 'dht22_1', '—', 'Sin datos', 'centro');
+            }
+            if (th.humidity != null) {
                 rows += buildReadingRow('Humedad', th.sensor_id || 'dht22_1',
-                    th.humidity != null ? th.humidity.toFixed(1) + ' %' : 'N/A',
-                    th.humidity != null ? 'Activo' : 'Sin datos', 'centro');
+                    th.humidity.toFixed(1) + ' %', 'Activo', 'centro');
+            } else {
+                rows += buildReadingRow('Humedad', 'dht22_1', '—', 'Sin datos', 'centro');
             }
-            if (readings.co2) {
-                const c = readings.co2;
+            if (c.co2 != null) {
                 rows += buildReadingRow('CO2', c.sensor_id || 'mhz19d_1',
-                    c.co2 != null ? Math.round(c.co2) + ' ppm' : 'N/A',
-                    c.co2 != null ? 'Activo' : 'Sin datos', 'centro');
+                    Math.round(c.co2) + ' ppm', 'Activo', 'centro');
+            } else {
+                rows += buildReadingRow('CO2', 'mhz19d_1', '—', 'Sin datos', 'centro');
             }
-
-            tbody.innerHTML = rows || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:30px;">Sin lecturas disponibles</td></tr>';
+            tbody.innerHTML = rows || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">Sin lecturas disponibles</td></tr>';
         })
         .catch(() => {});
 }
 
-function updateHealthCard(indicatorId, detailId, healthData, label) {
+function updateHealthCard(indicatorId, detailId, h) {
     const indicator = document.getElementById(indicatorId);
     const detail = document.getElementById(detailId);
-
-    if (!healthData) {
-        indicator.className = 'health-indicator warning';
-        detail.textContent = 'Sin informacion disponible';
+    if (!h) {
+        indicator.className = 'health-dot warning';
+        detail.textContent = 'Sin información disponible';
         return;
     }
-
-    if (healthData.status === 'ok' || healthData.healthy === true) {
-        indicator.className = 'health-indicator healthy';
-        detail.textContent = 'Funcionando correctamente' + (healthData.last_read ? ' | Ult. lectura: ' + healthData.last_read : '');
-    } else if (healthData.status === 'warning' || healthData.stale) {
-        indicator.className = 'health-indicator warning';
-        detail.textContent = 'Lecturas intermitentes' + (healthData.error ? ' | ' + healthData.error : '');
+    if (h.healthy === true || h.status === 'ok') {
+        indicator.className = 'health-dot healthy';
+        detail.textContent = 'Funcionando correctamente' + (h.last_read ? ' · Últ: ' + h.last_read : '');
+    } else if (h.status && (h.status === 'sin_datos' || h.status === 'warning')) {
+        indicator.className = 'health-dot warning';
+        detail.textContent = 'Lecturas intermitentes' + (h.error ? ' · ' + h.error : '');
     } else {
-        indicator.className = 'health-indicator error';
-        detail.textContent = 'Error: ' + (healthData.error || 'Sin respuesta del sensor');
+        indicator.className = 'health-dot error';
+        detail.textContent = 'Error: ' + (h.error || h.status || 'Sin respuesta');
     }
 }
 
 function buildReadingRow(sensor, id, value, status, ubicacion) {
-    const statusClass = status === 'Activo' ? 'on' : 'off';
+    const cls = status === 'Activo' ? 'on' : 'off';
     return '<tr>' +
         '<td>' + sensor + '</td>' +
-        '<td><code style="color:var(--text-muted);font-size:0.75rem;">' + id + '</code></td>' +
+        '<td><code>' + id + '</code></td>' +
         '<td style="color:var(--text-primary);font-weight:500;">' + value + '</td>' +
-        '<td><span class="event-tag ' + statusClass + '">' + status + '</span></td>' +
+        '<td><span class="tag ' + cls + '">' + status + '</span></td>' +
         '<td>' + ubicacion + '</td>' +
         '</tr>';
 }
 
-// --- Event Log ---
 function loadEvents() {
     fetch('/api/events?hours=24')
         .then(r => r.json())
         .then(events => {
             const tbody = document.getElementById('events-body');
             if (!Array.isArray(events) || events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:30px;">No hay eventos en las ultimas 24 horas</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px;">No hay eventos en las últimas 24 horas</td></tr>';
                 return;
             }
-
             tbody.innerHTML = events.slice(0, 50).map(ev => {
-                const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--';
+                const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : '--:--';
                 const accion = (ev.action || ev.accion || '').toLowerCase();
                 const trigger = ev.triggered_by || ev.trigger || 'manual';
                 const who = ev.username ? ev.username : (trigger === 'manual' ? '—' : trigger);
                 return '<tr>' +
-                    '<td>' + time + '</td>' +
-                    '<td>' + (ev.actuator || ev.nombre || '').replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) + '</td>' +
-                    '<td><span class="event-tag ' + (accion === 'on' ? 'on' : 'off') + '">' + accion.toUpperCase() + '</span></td>' +
-                    '<td><span class="event-tag ' + trigger + '">' + trigger + '</span></td>' +
-                    '<td><code style="color:var(--text-secondary);font-size:0.75rem;">' + who + '</code></td>' +
+                    '<td><code>' + time + '</code></td>' +
+                    '<td>' + (ev.actuator || ev.nombre || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + '</td>' +
+                    '<td><span class="tag ' + (accion === 'on' ? 'on' : 'off') + '">' + accion.toUpperCase() + '</span></td>' +
+                    '<td><span class="tag ' + trigger + '">' + trigger + '</span></td>' +
+                    '<td><code>' + who + '</code></td>' +
                     '</tr>';
             }).join('');
-        })
-        .catch(() => {});
+        });
 }
 
 function refreshAll() {
@@ -255,22 +234,18 @@ function refreshAll() {
     showToast('Datos actualizados', 'success');
 }
 
-// Initial load
 loadSensorHealth();
 loadEvents();
-
-// Auto-refresh every 10s
 setInterval(loadSensorHealth, 10000);
 setInterval(loadEvents, 30000);
 
-// Toast
 function showToast(message, type) {
-    const container = document.getElementById('toasts');
-    const toast = document.createElement('div');
-    toast.className = 'toast ' + type;
-    toast.innerHTML = '<span>' + message + '</span>';
-    container.appendChild(toast);
-    setTimeout(() => { toast.style.animation = 'toast-out 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+    const c = document.getElementById('toasts');
+    const t = document.createElement('div');
+    t.className = 'toast ' + (type || 'success');
+    t.innerHTML = '<span>' + message + '</span>';
+    c.appendChild(t);
+    setTimeout(() => { t.style.animation = 'toast-out 0.25s forwards'; setTimeout(() => t.remove(), 250); }, 3000);
 }
 </script>
 </body>

@@ -138,6 +138,36 @@ cloud_agent = CloudAgent(
 # Ultima lectura de sensores (compartida entre threads)
 latest_sensor_data = {}
 app_started_at = time.time()
+
+# Buffer rolling para filtrar spikes del MH-Z19D (sensor barato, da reads erraticos)
+_co2_buffer = []
+_CO2_BUFFER_SIZE = 5
+_CO2_MAX_REASONABLE = 2500  # ppm. Indoor grow no deberia pasar esto.
+_last_good_co2 = None
+
+def _filter_co2_spike(co2_raw):
+    """
+    Rechaza lecturas con jump >50% del valor anterior bueno, o sobre 2500 ppm.
+    Devuelve (valor_filtrado, is_spike). is_spike=True si lo descartamos.
+    """
+    global _last_good_co2, _co2_buffer
+    if co2_raw is None:
+        return None, False
+    # Hard limit: por encima de 2500 es claramente erroneo en un cultivo normal
+    if co2_raw > _CO2_MAX_REASONABLE:
+        return _last_good_co2, True
+    # Si tenemos un valor previo bueno, comparar
+    if _last_good_co2 is not None:
+        ratio = co2_raw / _last_good_co2 if _last_good_co2 > 0 else 1
+        # Salto >2x o <0.4x del previo es spike
+        if ratio > 2 or ratio < 0.4:
+            return _last_good_co2, True
+    # Aceptar
+    _last_good_co2 = co2_raw
+    _co2_buffer.append(co2_raw)
+    if len(_co2_buffer) > _CO2_BUFFER_SIZE:
+        _co2_buffer.pop(0)
+    return co2_raw, False
 sensor_lock = threading.Lock()
 
 # --- Login ---
@@ -231,9 +261,24 @@ def get_thresholds():
 @app.route("/api/sensor-health")
 @login_required
 def sensor_health():
-    health = sensor_reader.get_sensor_health()
+    health_by_id = sensor_reader.get_sensor_health()
     detailed = sensor_reader.read_all_detailed()
-    return jsonify({"health": health, "readings": detailed})
+    # Aggregar health por variable (la UI consume "temperatura"/"humedad"/"co2")
+    def _ok(status):
+        return status == "ok"
+    by_variable = {}
+    for sid, status in (health_by_id or {}).items():
+        sid_l = (sid or "").lower()
+        if "dht22" in sid_l or "temp" in sid_l or "hum" in sid_l:
+            by_variable.setdefault("temperatura", {"status": status, "healthy": _ok(status), "sensor_id": sid})
+            by_variable.setdefault("humedad",     {"status": status, "healthy": _ok(status), "sensor_id": sid})
+        elif "mhz19" in sid_l or "co2" in sid_l:
+            by_variable.setdefault("co2", {"status": status, "healthy": _ok(status), "sensor_id": sid})
+    return jsonify({
+        "health": by_variable,
+        "raw_health": health_by_id,
+        "readings": detailed,
+    })
 
 # --- Service worker (PWA) ---
 @app.route("/sw.js")
@@ -1140,8 +1185,11 @@ def sensor_background_thread():
                 temp = None
             if hum is not None and (hum <= 0 or hum > 100):
                 hum = None
-            if co2 is not None and (co2 <= 0 or co2 > 5000):
-                co2 = None
+            # CO2: usar filtro de spike sofisticado (sensor MH-Z19D tira reads malos)
+            if co2 is not None:
+                co2, was_spike = _filter_co2_spike(co2)
+                if was_spike:
+                    print(f"[co2] spike rechazado, manteniendo {co2}", flush=True)
 
             # Calcular VPD (Vapor Pressure Deficit) para que el frontend lo muestre
             vpd = None

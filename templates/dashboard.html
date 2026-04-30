@@ -921,8 +921,10 @@ function drawChart(highlightIdx) {
         ctx.lineWidth = 1.5;
         ctx.lineJoin = 'round';
         valid.forEach((p, i) => {
+            // Clip al rango del chart para que outliers no se salgan
+            const clipped = Math.min(p, maxVal);
             const x = pad.left + (i / (valid.length - 1)) * plotW;
-            const y = pad.top + plotH - (p / maxVal) * plotH;
+            const y = pad.top + plotH - (clipped / maxVal) * plotH;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         });
         ctx.stroke();
@@ -1013,14 +1015,16 @@ function loadHistory() {
         .then(r => r.json())
         .then(data => {
             if (Array.isArray(data)) {
+                // Filtrar spikes erroneos del CO2 (sensor MH-Z19D ocasionalmente
+                // tira reads de 4-5k ppm que son falsos)
+                const cleanCO2 = (v) => (v == null || v <= 0 || v > 2500) ? null : v;
                 chartData.temp = data.map(d => d.temperature);
                 chartData.hum = data.map(d => d.humidity);
-                chartData.co2 = data.map(d => d.co2);
+                chartData.co2 = data.map(d => cleanCO2(d.co2));
                 chartData.ts = data.map(d => d.timestamp);
-                // Seed live-spark buffers with the tail of history so sparklines start populated
                 liveSpark.temp = chartData.temp.slice(-SPARK_MAX);
                 liveSpark.hum  = chartData.hum.slice(-SPARK_MAX);
-                liveSpark.co2  = chartData.co2.slice(-SPARK_MAX);
+                liveSpark.co2  = chartData.co2.filter(v => v != null).slice(-SPARK_MAX);
                 requestAnimationFrame(() => {
                     drawChart();
                     drawAllSparklines();

@@ -872,11 +872,14 @@ function drawSparkline(canvasId, points, color, minVal, maxVal) {
 }
 
 function updateMinMax(id, points, unit) {
-    if (points.length === 0) return;
-    const min = Math.min(...points);
-    const max = Math.max(...points);
+    // Filtrar nulls/ceros: Math.min(...[1, null, 3]) devuelve 0 porque null se coerce
+    const valid = (points || []).filter(v => v != null && v > 0);
     const el = document.getElementById(id);
-    if (el) el.textContent = min.toFixed(1) + ' / ' + max.toFixed(1) + ' ' + unit;
+    if (!el) return;
+    if (valid.length === 0) { el.textContent = '-- / -- ' + unit; return; }
+    const min = Math.min(...valid);
+    const max = Math.max(...valid);
+    el.textContent = min.toFixed(1) + ' / ' + max.toFixed(1) + ' ' + unit;
 }
 
 // Main chart

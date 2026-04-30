@@ -37,6 +37,10 @@
                 <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
                 <span>Dashboard</span>
             </a>
+            <a href="/calendar" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>Calendario</span>
+            </a>
             <a href="/diagnostics" class="nav-item">
                 <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 <span>Diagnosticos</span>
@@ -110,6 +114,19 @@
                 <span class="status-bar-value" id="sb-uptime">--</span>
             </div>
         </div>
+
+        <!-- Cycle widget (compact) - se llena via JS -->
+        <a href="/calendar" class="cycle-widget" id="cycle-widget" style="display: none;">
+            <div>
+                <div class="cycle-widget-day" id="cw-day">--</div>
+                <span class="cycle-widget-day-label">DIA</span>
+            </div>
+            <div class="cycle-widget-info">
+                <div class="cycle-widget-stage" id="cw-stage">---</div>
+                <div class="cycle-widget-meta" id="cw-meta">---</div>
+            </div>
+            <div class="cycle-widget-cta">→</div>
+        </a>
 
         <!-- ========== Sensores ========== -->
         <section class="section">
@@ -428,6 +445,38 @@
 <div class="toast-container" id="toasts"></div>
 
 <script>
+// ============================================================
+// CYCLE WIDGET (calendario summary)
+// ============================================================
+function loadCycleWidget() {
+    fetch('/api/cycle/current')
+        .then(r => r.json())
+        .then(data => {
+            const w = document.getElementById('cycle-widget');
+            if (!data.active) { w.style.display = 'none'; return; }
+            const stageLabel = (data.cycle.current_stage || '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            document.getElementById('cw-day').textContent = data.day_of_cycle;
+            document.getElementById('cw-stage').textContent = stageLabel;
+            const remaining = data.days_remaining_in_stage;
+            let meta;
+            if (data.transition_due) {
+                meta = '⚠️ Toca cambio de fase';
+                w.classList.add('due');
+            } else if (remaining != null) {
+                meta = `${data.days_in_stage}/${data.stage_duration} dias en fase · ${remaining} para cambio`;
+                w.classList.remove('due');
+            } else {
+                meta = `${data.days_in_stage} dias en fase`;
+                w.classList.remove('due');
+            }
+            document.getElementById('cw-meta').textContent = meta;
+            w.style.display = 'flex';
+        })
+        .catch(() => {});
+}
+loadCycleWidget();
+setInterval(loadCycleWidget, 60000); // refrescar cada minuto
+
 // ============================================================
 // LAST-UPDATE TRACKING per sensor
 // ============================================================

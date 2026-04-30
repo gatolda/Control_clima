@@ -1,0 +1,15 @@
+[Unit]
+Description=Greenhouse Calendar Notifier (Telegram daily reminders)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=kowen
+Group=kowen
+WorkingDirectory=/home/kowen/proyectos/Control_clima
+EnvironmentFile=/home/kowen/proyectos/Control_clima/.env
+ExecStart=/usr/bin/python3 /home/kowen/proyectos/Control_clima/bin/calendar-notifier.py
+
+StandardOutput=append:/var/log/greenhouse-calendar.log
+StandardError=append:/var/log/greenhouse-calendar.log

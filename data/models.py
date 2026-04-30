@@ -61,6 +61,33 @@ CREATE TABLE IF NOT EXISTS camera_events (
     analysis TEXT
 );
 
+CREATE TABLE IF NOT EXISTS crop_cycles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    start_date DATE NOT NULL,
+    current_stage TEXT NOT NULL DEFAULT 'germinacion',
+    stage_started_at DATE NOT NULL,
+    end_date DATE,
+    active INTEGER NOT NULL DEFAULT 1,
+    notes TEXT,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS crop_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id INTEGER NOT NULL,
+    date DATE NOT NULL,
+    event_type TEXT NOT NULL,
+    notes TEXT,
+    completed INTEGER NOT NULL DEFAULT 0,
+    completed_at DATETIME,
+    telegram_sent_at DATETIME,
+    created_by INTEGER,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (cycle_id) REFERENCES crop_cycles(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sensor_timestamp ON sensor_readings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_timestamp ON actuator_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_user ON actuator_events(user_id);
@@ -69,10 +96,23 @@ CREATE INDEX IF NOT EXISTS idx_soil_zone ON soil_readings(zone_id);
 CREATE INDEX IF NOT EXISTS idx_irrigation_timestamp ON irrigation_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_irrigation_zone ON irrigation_events(zone_id);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_crop_cycles_active ON crop_cycles(active);
+CREATE INDEX IF NOT EXISTS idx_crop_events_cycle_date ON crop_events(cycle_id, date);
 """
 
 # Roles: admin (todo), operator (controles+config de cultivo, no usuarios), viewer (solo lectura)
 VALID_ROLES = ("admin", "operator", "viewer")
+
+# Tipos de evento de cultivo validos
+CROP_EVENT_TYPES = (
+    "abono",
+    "poda",
+    "defoliacion",
+    "transplante",
+    "plaga",
+    "fase_cambio",
+    "otro",
+)
 
 # Configuracion por defecto al inicializar
 DEFAULT_CONFIG = {

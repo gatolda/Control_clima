@@ -2,7 +2,7 @@ import sqlite3
 import os
 import math
 from werkzeug.security import generate_password_hash, check_password_hash
-from data.models import SCHEMA, DEFAULT_CONFIG, STAGE_THRESHOLDS, VALID_ROLES
+from data.models import SCHEMA, DEFAULT_CONFIG, STAGE_THRESHOLDS, VALID_ROLES, CROP_EVENT_TYPES, STAGE_ORDER
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "greenhouse.db")
 
@@ -208,6 +208,173 @@ class Database:
         )
         conn.commit()
         conn.close()
+
+    # --- Crop cycles ---
+
+    def create_cycle(self, start_date, current_stage="germinacion", name=None, notes=None):
+        """Crea un ciclo nuevo y lo deja como el activo. Si habia uno activo, NO lo cierra
+        (eso es responsabilidad del caller; tipicamente end_active_cycle antes)."""
+        if current_stage not in STAGE_THRESHOLDS:
+            raise ValueError(f"Etapa invalida: {current_stage}")
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO crop_cycles (name, start_date, current_stage, stage_started_at, notes)
+               VALUES (?, ?, ?, ?, ?)""",
+            (name, start_date, current_stage, start_date, notes)
+        )
+        conn.commit()
+        cid = cur.lastrowid
+        conn.close()
+        return cid
+
+    def end_active_cycle(self, end_date=None):
+        """Marca el ciclo activo como inactivo. Devuelve el id del ciclo cerrado o None."""
+        active = self.get_active_cycle()
+        if not active:
+            return None
+        from datetime import date as _date
+        ed = end_date or _date.today().isoformat()
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE crop_cycles SET active = 0, end_date = ? WHERE id = ?",
+            (ed, active["id"])
+        )
+        conn.commit()
+        conn.close()
+        return active["id"]
+
+    def get_active_cycle(self):
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM crop_cycles WHERE active = 1 ORDER BY start_date DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_cycle(self, cycle_id):
+        conn = self._get_conn()
+        row = conn.execute("SELECT * FROM crop_cycles WHERE id = ?", (cycle_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_cycle_stage(self, cycle_id, new_stage, started_at=None):
+        """Cambia la etapa del ciclo y actualiza stage_started_at a hoy (o lo provisto)."""
+        if new_stage not in STAGE_THRESHOLDS:
+            raise ValueError(f"Etapa invalida: {new_stage}")
+        from datetime import date as _date
+        sd = started_at or _date.today().isoformat()
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE crop_cycles SET current_stage = ?, stage_started_at = ? WHERE id = ?",
+            (new_stage, sd, cycle_id)
+        )
+        conn.commit()
+        conn.close()
+
+    # --- Crop events ---
+
+    def create_crop_event(self, cycle_id, date, event_type, notes=None, created_by=None):
+        if event_type not in CROP_EVENT_TYPES:
+            raise ValueError(f"Tipo de evento invalido: {event_type}")
+        # Si el evento es del pasado, lo marcamos auto-completed
+        from datetime import date as _date
+        is_past = date <= _date.today().isoformat()
+        completed = 1 if is_past else 0
+        completed_at = "datetime('now', 'localtime')" if is_past else None
+        conn = self._get_conn()
+        if completed:
+            cur = conn.execute(
+                """INSERT INTO crop_events (cycle_id, date, event_type, notes, completed, completed_at, created_by)
+                   VALUES (?, ?, ?, ?, 1, datetime('now', 'localtime'), ?)""",
+                (cycle_id, date, event_type, notes, created_by)
+            )
+        else:
+            cur = conn.execute(
+                """INSERT INTO crop_events (cycle_id, date, event_type, notes, created_by)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (cycle_id, date, event_type, notes, created_by)
+            )
+        conn.commit()
+        eid = cur.lastrowid
+        conn.close()
+        return eid
+
+    def list_crop_events(self, cycle_id, days_past=30, days_future=30):
+        """Eventos del ciclo en una ventana de tiempo (pasado y futuro)."""
+        from datetime import date as _date, timedelta as _td
+        today = _date.today()
+        start = (today - _td(days=days_past)).isoformat()
+        end = (today + _td(days=days_future)).isoformat()
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT e.*, u.username
+               FROM crop_events e
+               LEFT JOIN users u ON u.id = e.created_by
+               WHERE e.cycle_id = ? AND e.date >= ? AND e.date <= ?
+               ORDER BY e.date ASC, e.id ASC""",
+            (cycle_id, start, end)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_crop_event(self, event_id):
+        conn = self._get_conn()
+        row = conn.execute("SELECT * FROM crop_events WHERE id = ?", (event_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def mark_event_completed(self, event_id, completed=True):
+        conn = self._get_conn()
+        if completed:
+            conn.execute(
+                "UPDATE crop_events SET completed = 1, completed_at = datetime('now', 'localtime') WHERE id = ?",
+                (event_id,)
+            )
+        else:
+            conn.execute(
+                "UPDATE crop_events SET completed = 0, completed_at = NULL WHERE id = ?",
+                (event_id,)
+            )
+        conn.commit()
+        conn.close()
+
+    def delete_crop_event(self, event_id):
+        conn = self._get_conn()
+        conn.execute("DELETE FROM crop_events WHERE id = ?", (event_id,))
+        conn.commit()
+        conn.close()
+
+    def mark_event_telegram_sent(self, event_id):
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE crop_events SET telegram_sent_at = datetime('now', 'localtime') WHERE id = ?",
+            (event_id,)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_due_reminders(self):
+        """
+        Eventos que necesitan recordatorio Telegram:
+        - No completados
+        - Fecha = hoy o manana
+        - Aun no notificados (telegram_sent_at IS NULL)
+        Devuelve lista de eventos ordenados por fecha.
+        """
+        from datetime import date as _date, timedelta as _td
+        today = _date.today().isoformat()
+        tomorrow = (_date.today() + _td(days=1)).isoformat()
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT * FROM crop_events
+               WHERE completed = 0
+                 AND telegram_sent_at IS NULL
+                 AND date IN (?, ?)
+               ORDER BY date ASC""",
+            (today, tomorrow)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     # --- Configuracion ---
 

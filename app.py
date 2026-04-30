@@ -11,7 +11,7 @@ from data.database import Database
 from core.irrigation_manager import IrrigationManager
 from core.camera_manager import CameraManager
 from core.climate_controller import ClimateController
-from data.models import STAGE_THRESHOLDS, STAGE_ORDER
+from data.models import STAGE_THRESHOLDS, STAGE_ORDER, CROP_EVENT_TYPES
 from cloud_agent.config import AgentConfig
 from cloud_agent.agent import CloudAgent
 from dotenv import load_dotenv
@@ -534,6 +534,187 @@ def users_update_role(user_id):
 @app.context_processor
 def inject_user():
     return {"user": current_user}
+
+# --- Calendario / Crop cycle API ---
+
+def _next_stage_after(stage):
+    """Devuelve el nombre de la etapa que sigue, o None si es la ultima."""
+    try:
+        i = STAGE_ORDER.index(stage)
+        return STAGE_ORDER[i + 1] if i + 1 < len(STAGE_ORDER) else None
+    except ValueError:
+        return None
+
+def _build_timeline(cycle):
+    """Construye la metadata visual del ciclo: dia actual, dias en fase, predicciones."""
+    if not cycle:
+        return None
+    from datetime import date as _date
+    today = _date.today()
+    start = _date.fromisoformat(cycle["start_date"])
+    stage_start = _date.fromisoformat(cycle["stage_started_at"])
+    day_of_cycle = (today - start).days + 1
+    days_in_stage = (today - stage_start).days
+
+    stage = cycle["current_stage"]
+    th = STAGE_THRESHOLDS.get(stage, {})
+    stage_duration = th.get("duracion_dias", 0)
+    days_remaining = max(0, stage_duration - days_in_stage) if stage_duration else None
+    transition_due = stage_duration > 0 and days_in_stage >= stage_duration
+
+    # Construir secuencia de etapas con sus fechas previstas
+    stages_plan = []
+    cursor = start
+    for s in STAGE_ORDER:
+        d = STAGE_THRESHOLDS.get(s, {}).get("duracion_dias", 0)
+        stages_plan.append({
+            "stage": s,
+            "starts": cursor.isoformat(),
+            "ends": (cursor + __import__("datetime").timedelta(days=d)).isoformat() if d else None,
+            "days": d,
+            "is_current": s == stage,
+            "is_past": STAGE_ORDER.index(s) < STAGE_ORDER.index(stage) if stage in STAGE_ORDER else False,
+        })
+        if d:
+            cursor = cursor + __import__("datetime").timedelta(days=d)
+
+    return {
+        "cycle": cycle,
+        "today": today.isoformat(),
+        "day_of_cycle": day_of_cycle,
+        "days_in_stage": days_in_stage,
+        "stage_duration": stage_duration,
+        "days_remaining_in_stage": days_remaining,
+        "transition_due": transition_due,
+        "next_stage": _next_stage_after(stage),
+        "stages_plan": stages_plan,
+        "stage_info": th.get("descripcion", ""),
+    }
+
+@app.route("/calendar")
+@login_required
+def calendar_page():
+    return render_template("calendar.html")
+
+@app.route("/api/cycle/current")
+@login_required
+def api_cycle_current():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"active": False})
+    return jsonify({"active": True, **_build_timeline(active)})
+
+@app.route("/api/cycle", methods=["POST"])
+@role_required("admin", "operator")
+def api_cycle_create():
+    data = request.get_json() or {}
+    start_date = data.get("start_date")
+    stage = data.get("current_stage", "germinacion")
+    name = data.get("name")
+    notes = data.get("notes")
+    if not start_date:
+        return jsonify({"ok": False, "error": "start_date requerido"}), 400
+    # Cerrar ciclo activo si existe
+    closed = db.end_active_cycle()
+    try:
+        cid = db.create_cycle(start_date=start_date, current_stage=stage, name=name, notes=notes)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    # Sincronizar con el climate controller
+    db.set_config("stage", stage)
+    return jsonify({"ok": True, "cycle_id": cid, "previous_closed": closed})
+
+@app.route("/api/cycle/end", methods=["POST"])
+@role_required("admin", "operator")
+def api_cycle_end():
+    data = request.get_json() or {}
+    end_date = data.get("end_date")
+    closed = db.end_active_cycle(end_date=end_date)
+    if not closed:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 404
+    return jsonify({"ok": True, "closed_cycle_id": closed})
+
+@app.route("/api/cycle/advance-stage", methods=["POST"])
+@role_required("admin", "operator")
+def api_cycle_advance():
+    """Avanza al siguiente stage del ciclo activo. Tambien acepta target stage especifico."""
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 404
+    data = request.get_json() or {}
+    target = data.get("stage")
+    if not target:
+        target = _next_stage_after(active["current_stage"])
+    if not target:
+        return jsonify({"ok": False, "error": "Ya estas en la ultima etapa"}), 400
+    if target not in STAGE_THRESHOLDS:
+        return jsonify({"ok": False, "error": "Etapa invalida"}), 400
+    db.update_cycle_stage(active["id"], target)
+    db.set_config("stage", target)
+    # Crear evento automatico de cambio de fase
+    from datetime import date as _date
+    try:
+        db.create_crop_event(
+            cycle_id=active["id"],
+            date=_date.today().isoformat(),
+            event_type="fase_cambio",
+            notes=f"Cambio de {active['current_stage']} a {target}",
+            created_by=getattr(current_user, "user_id", None),
+        )
+    except Exception:
+        pass
+    socketio.emit("climate_status", climate_controller.get_status())
+    return jsonify({"ok": True, "new_stage": target})
+
+@app.route("/api/cycle/events", methods=["GET"])
+@login_required
+def api_cycle_events_list():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify([])
+    days_past = request.args.get("days_past", 30, type=int)
+    days_future = request.args.get("days_future", 30, type=int)
+    return jsonify(db.list_crop_events(active["id"], days_past=days_past, days_future=days_future))
+
+@app.route("/api/cycle/events", methods=["POST"])
+@role_required("admin", "operator")
+def api_cycle_events_create():
+    active = db.get_active_cycle()
+    if not active:
+        return jsonify({"ok": False, "error": "No hay ciclo activo"}), 400
+    data = request.get_json() or {}
+    date = data.get("date")
+    event_type = data.get("event_type")
+    notes = data.get("notes")
+    if not date or not event_type:
+        return jsonify({"ok": False, "error": "date y event_type son requeridos"}), 400
+    try:
+        eid = db.create_crop_event(
+            cycle_id=active["id"], date=date, event_type=event_type, notes=notes,
+            created_by=getattr(current_user, "user_id", None),
+        )
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True, "event_id": eid})
+
+@app.route("/api/cycle/events/<int:event_id>/complete", methods=["POST"])
+@role_required("admin", "operator")
+def api_event_complete(event_id):
+    data = request.get_json() or {}
+    completed = data.get("completed", True)
+    db.mark_event_completed(event_id, completed=bool(completed))
+    return jsonify({"ok": True})
+
+@app.route("/api/cycle/events/<int:event_id>", methods=["DELETE"])
+@role_required("admin", "operator")
+def api_event_delete(event_id):
+    db.delete_crop_event(event_id)
+    return jsonify({"ok": True})
+
+@app.route("/api/cycle/event-types")
+@login_required
+def api_event_types():
+    return jsonify(list(CROP_EVENT_TYPES))
 
 # --- Socket.IO Events ---
 

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark" data-density="normal"{% if user.is_authenticated %} data-role="{{ user.role }}"{% endif %}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario — Control Climatico</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        (function() {
+            const t = localStorage.getItem('theme');
+            const d = localStorage.getItem('density');
+            if (t) document.documentElement.setAttribute('data-theme', t);
+            if (d) document.documentElement.setAttribute('data-density', d);
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+            </div>
+            <div class="sidebar-brand-text">
+                <div class="sidebar-brand-title">Control Climatico</div>
+                <div class="sidebar-brand-subtitle">Invernadero</div>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-nav-section">Monitoreo</div>
+            <a href="/" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="/calendar" class="nav-item active">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>Calendario</span>
+            </a>
+            <a href="/diagnostics" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                <span>Diagnosticos</span>
+            </a>
+
+            <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/settings" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Ajustes</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            {% if user.is_authenticated %}
+            <span class="role-chip role-{{ user.role }}" title="{{ user.username }} ({{ user.role }})">{{ user.role }}</span>
+            {% endif %}
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Calendario de Cultivo</h1>
+                <div class="page-subtitle">Tracking del ciclo, eventos pasados y proximos</div>
+            </div>
+        </div>
+
+        <div id="cycle-container">
+            <div class="empty-state">Cargando...</div>
+        </div>
+    </main>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const CAN_WRITE = {{ 'true' if user.is_authenticated and user.can_write else 'false' }};
+
+const TYPE_LABELS = {
+    abono: "Abono",
+    poda: "Poda",
+    defoliacion: "Defoliacion",
+    transplante: "Transplante",
+    plaga: "Plaga",
+    fase_cambio: "Cambio de fase",
+    otro: "Otro",
+};
+
+function loadCycle() {
+    fetch('/api/cycle/current')
+        .then(r => r.json())
+        .then(data => {
+            const c = document.getElementById('cycle-container');
+            if (!data.active) {
+                c.innerHTML = renderNoCycle();
+                wireNoCycle();
+                return;
+            }
+            c.innerHTML = renderActiveCycle(data);
+            wireActiveCycle();
+            loadEvents();
+        })
+        .catch(() => {
+            document.getElementById('cycle-container').innerHTML =
+                '<div class="empty-state">Error al cargar el ciclo</div>';
+        });
+}
+
+function renderNoCycle() {
+    if (!CAN_WRITE) {
+        return '<div class="no-cycle"><h3>Sin ciclo activo</h3><p>No hay un ciclo de cultivo iniciado. Pedile a un admin u operador que inicie uno.</p></div>';
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    return `
+        <div class="no-cycle">
+            <h3>Sin ciclo activo</h3>
+            <p>Inicia un ciclo nuevo para empezar a registrar eventos y recibir recordatorios.</p>
+            <div class="no-cycle-form">
+                <div>
+                    <label class="form-label">Fecha de inicio</label>
+                    <input type="date" class="form-input" id="nc-date" value="${today}">
+                </div>
+                <div>
+                    <label class="form-label">Etapa inicial</label>
+                    <select class="form-select" id="nc-stage">
+                        <option value="germinacion">Germinacion</option>
+                        <option value="plantula">Plantula</option>
+                        <option value="vegetativo_temprano" selected>Vegetativo Temprano</option>
+                        <option value="vegetativo_tardio">Vegetativo Tardio</option>
+                        <option value="pre_floracion">Pre-Floracion</option>
+                        <option value="floracion">Floracion</option>
+                        <option value="floracion_tardia">Floracion Tardia</option>
+                        <option value="secado">Secado</option>
+                        <option value="curado">Curado</option>
+                    </select>
+                </div>
+                <button class="btn-primary" onclick="startCycle()">Iniciar ciclo</button>
+            </div>
+        </div>
+    `;
+}
+
+function startCycle() {
+    const date = document.getElementById('nc-date').value;
+    const stage = document.getElementById('nc-stage').value;
+    if (!date) { showToast('Selecciona una fecha', 'error'); return; }
+    fetch('/api/cycle', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({start_date: date, current_stage: stage}),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) { showToast('Ciclo iniciado', 'success'); loadCycle(); }
+        else showToast(res.error || 'Error', 'error');
+    });
+}
+
+function endCycle() {
+    if (!confirm('¿Terminar el ciclo activo? Esta accion lo marca como cerrado y permite iniciar uno nuevo.')) return;
+    fetch('/api/cycle/end', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+    .then(r => r.json()).then(res => {
+        if (res.ok) { showToast('Ciclo cerrado', 'success'); loadCycle(); }
+        else showToast(res.error || 'Error', 'error');
+    });
+}
+
+function wireNoCycle() { /* nothing extra */ }
+
+function renderActiveCycle(d) {
+    const cycle = d.cycle;
+    const stageLabel = (cycle.current_stage || '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const remaining = d.days_remaining_in_stage;
+    const due = d.transition_due;
+    const progPct = d.stage_duration ? Math.min(100, (d.days_in_stage / d.stage_duration) * 100) : 0;
+
+    let actionHtml = '';
+    if (CAN_WRITE) {
+        if (due && d.next_stage) {
+            const nextLabel = d.next_stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            actionHtml = `
+                <div class="cycle-action-due">
+                    Tu fase termino. ¿Avanzar a <strong>${nextLabel}</strong>?
+                </div>
+                <button class="btn-primary" onclick="advanceStage()">Avanzar fase</button>
+                <button class="btn-secondary" onclick="endCycle()">Terminar ciclo</button>
+            `;
+        } else {
+            actionHtml = `
+                <button class="btn-secondary" onclick="advanceStage()">Avanzar fase manualmente</button>
+                <button class="btn-secondary" onclick="endCycle()">Terminar ciclo</button>
+            `;
+        }
+    }
+
+    let timelineHtml = '<div class="stage-timeline">';
+    for (const s of d.stages_plan) {
+        const cls = s.is_current ? 'current' : (s.is_past ? 'past' : '');
+        const sLabel = s.stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        timelineHtml += `
+            <div class="stage-block ${cls}">
+                <div class="stage-block-name">${sLabel}</div>
+                <div class="stage-block-meta">${s.days || '--'} dias</div>
+                <div class="stage-block-dates">${s.starts}${s.ends ? ' → ' + s.ends : ''}</div>
+            </div>
+        `;
+    }
+    timelineHtml += '</div>';
+
+    const eventTypeOptions = Object.entries(TYPE_LABELS)
+        .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    const today = new Date().toISOString().slice(0, 10);
+    const quickAddHtml = CAN_WRITE ? `
+        <div class="event-add">
+            <div>
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-input" id="ev-date" value="${today}">
+            </div>
+            <div>
+                <label class="form-label">Tipo</label>
+                <select class="form-select" id="ev-type">${eventTypeOptions}</select>
+            </div>
+            <div class="event-add-notes">
+                <label class="form-label">Notas (opcional)</label>
+                <input type="text" class="form-input" id="ev-notes" placeholder="ej: Bloom 5ml/L">
+            </div>
+            <div class="event-add-submit">
+                <button class="btn-primary" onclick="addEvent()">Agregar evento</button>
+            </div>
+        </div>
+    ` : '';
+
+    return `
+        <section class="section">
+            <div class="cycle-hero">
+                <div class="cycle-hero-main">
+                    <div class="cycle-hero-day">Dia ${d.day_of_cycle} del ciclo</div>
+                    <div class="cycle-hero-stage">${stageLabel}</div>
+                    <div class="cycle-hero-desc">${d.stage_info || ''}</div>
+                    <div class="cycle-hero-progress">
+                        <div class="cycle-hero-progress-fill ${due ? 'due' : ''}" style="width: ${progPct}%"></div>
+                    </div>
+                    <div class="cycle-hero-progress-meta">
+                        <span>Inicio fase: ${cycle.stage_started_at}</span>
+                        <span>${d.days_in_stage} / ${d.stage_duration || '--'} dias</span>
+                    </div>
+                </div>
+                <div class="cycle-hero-actions">${actionHtml}</div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-head">
+                <div class="section-title">Timeline de fases</div>
+            </div>
+            ${timelineHtml}
+        </section>
+
+        ${quickAddHtml ? `<section class="section">
+            <div class="section-head"><div class="section-title">Registrar evento</div></div>
+            ${quickAddHtml}
+        </section>` : ''}
+
+        <section class="section">
+            <div class="events-grid">
+                <div>
+                    <div class="section-head"><div class="section-title">Proximos (siguientes 30 dias)</div></div>
+                    <div class="events-list" id="events-upcoming"><div class="empty-state">Cargando...</div></div>
+                </div>
+                <div>
+                    <div class="section-head"><div class="section-title">Historico (ultimos 30 dias)</div></div>
+                    <div class="events-list" id="events-past"><div class="empty-state">Cargando...</div></div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function wireActiveCycle() { /* delegated below */ }
+
+function advanceStage() {
+    fetch('/api/cycle/advance-stage', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+        .then(r => r.json()).then(res => {
+            if (res.ok) { showToast('Fase avanzada a ' + res.new_stage, 'success'); loadCycle(); }
+            else showToast(res.error || 'Error', 'error');
+        });
+}
+
+function addEvent() {
+    const date = document.getElementById('ev-date').value;
+    const type = document.getElementById('ev-type').value;
+    const notes = document.getElementById('ev-notes').value;
+    if (!date) { showToast('Selecciona fecha', 'error'); return; }
+    fetch('/api/cycle/events', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({date, event_type: type, notes}),
+    })
+    .then(r => r.json()).then(res => {
+        if (res.ok) {
+            showToast('Evento agregado', 'success');
+            document.getElementById('ev-notes').value = '';
+            loadEvents();
+        } else showToast(res.error || 'Error', 'error');
+    });
+}
+
+function loadEvents() {
+    fetch('/api/cycle/events?days_past=30&days_future=30')
+        .then(r => r.json())
+        .then(events => {
+            if (!Array.isArray(events)) return;
+            const today = new Date().toISOString().slice(0, 10);
+            const upcoming = events.filter(e => e.date >= today);
+            const past = events.filter(e => e.date < today).reverse();
+            document.getElementById('events-upcoming').innerHTML =
+                upcoming.length ? upcoming.map(renderEventRow).join('')
+                                : '<div class="empty-state">Sin eventos proximos</div>';
+            document.getElementById('events-past').innerHTML =
+                past.length ? past.map(renderEventRow).join('')
+                            : '<div class="empty-state">Sin eventos previos</div>';
+        });
+}
+
+function renderEventRow(ev) {
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    let timeClass = 'upcoming';
+    if (ev.date < today) timeClass = 'past';
+    else if (ev.date === today) timeClass = 'today';
+    else if (ev.date === tomorrow) timeClass = 'tomorrow';
+
+    const typeLabel = TYPE_LABELS[ev.event_type] || ev.event_type;
+    const completedClass = ev.completed ? 'completed' : '';
+    const dateLabel = formatEventDate(ev.date, today, tomorrow);
+
+    let actions = '';
+    if (CAN_WRITE) {
+        const checkSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>';
+        const undoSvg  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
+        const xSvg     = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        actions = `
+            <button title="${ev.completed ? 'Marcar pendiente' : 'Marcar hecho'}" onclick="toggleComplete(${ev.id}, ${!ev.completed})">
+                ${ev.completed ? undoSvg : checkSvg}
+            </button>
+            <button class="danger" title="Eliminar" onclick="deleteEvent(${ev.id})">${xSvg}</button>
+        `;
+    }
+
+    return `
+        <div class="event-row ${timeClass} type-${ev.event_type} ${completedClass}">
+            <div class="event-row-date">${dateLabel}</div>
+            <div class="event-row-content">
+                <div class="event-row-type">${typeLabel}</div>
+                <div class="event-row-notes" title="${(ev.notes || '').replace(/"/g, '&quot;')}">${ev.notes || ''}</div>
+            </div>
+            <div class="event-row-actions">${actions}</div>
+        </div>
+    `;
+}
+
+function formatEventDate(d, today, tomorrow) {
+    if (d === today) return 'HOY';
+    if (d === tomorrow) return 'MANANA';
+    // Format as DD MMM
+    const date = new Date(d + 'T00:00:00');
+    const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return String(date.getDate()).padStart(2, '0') + ' ' + months[date.getMonth()];
+}
+
+function toggleComplete(id, completed) {
+    fetch(`/api/cycle/events/${id}/complete`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({completed}),
+    }).then(r => r.json()).then(res => {
+        if (res.ok) loadEvents();
+    });
+}
+
+function deleteEvent(id) {
+    if (!confirm('Eliminar este evento?')) return;
+    fetch(`/api/cycle/events/${id}`, {method: 'DELETE'})
+        .then(r => r.json()).then(res => { if (res.ok) loadEvents(); });
+}
+
+function showToast(message, type) {
+    type = type || 'success';
+    const c = document.getElementById('toasts');
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.innerHTML = '<span>' + message + '</span>';
+    c.appendChild(t);
+    setTimeout(() => { t.style.animation = 'toast-out 0.25s forwards'; setTimeout(() => t.remove(), 250); }, 3500);
+}
+
+loadCycle();
+</script>
+</body>
+</html>

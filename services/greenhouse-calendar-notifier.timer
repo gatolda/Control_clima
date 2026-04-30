@@ -1,0 +1,10 @@
+[Unit]
+Description=Run greenhouse calendar notifier daily at 9am
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

@@ -68,6 +68,16 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
                         Sistema
                     </button>
+                    {% if user.is_authenticated and user.is_admin %}
+                    <button class="settings-nav-item" onclick="showPanel('users')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        Usuarios
+                    </button>
+                    {% endif %}
+                    <button class="settings-nav-item" onclick="showPanel('account')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        Mi Cuenta
+                    </button>
                 </div>
             </div>
 
@@ -276,6 +286,90 @@
                         </div>
                     </div>
                 </div>
+
+                {% if user.is_authenticated and user.is_admin %}
+                <!-- Users Panel (admin only) -->
+                <div class="settings-panel" id="panel-users">
+                    <div class="card fade-in">
+                        <div class="section-title" style="margin-top: 0;">Usuarios del sistema</div>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+                            Cada persona que usa el sistema tiene su cuenta con rol. <strong style="color: var(--text-primary);">admin</strong> = todo,
+                            <strong style="color: var(--text-primary);">operator</strong> = controles + config de cultivo,
+                            <strong style="color: var(--text-primary);">viewer</strong> = solo lectura.
+                        </p>
+
+                        <!-- New user form -->
+                        <div class="card" style="padding: 16px; margin-bottom: 20px;">
+                            <div class="section-title" style="margin-top: 0; margin-bottom: 12px;">Crear usuario nuevo</div>
+                            <div class="form-row">
+                                <div>
+                                    <label class="form-label">Usuario</label>
+                                    <input type="text" class="form-input" id="new-user-username" autocomplete="off" placeholder="juan">
+                                </div>
+                                <div>
+                                    <label class="form-label">Contrasenya</label>
+                                    <input type="password" class="form-input" id="new-user-password" autocomplete="new-password" placeholder="min. 6 caracteres">
+                                </div>
+                            </div>
+                            <div class="form-row mt-4">
+                                <div>
+                                    <label class="form-label">Rol</label>
+                                    <select class="form-select" id="new-user-role">
+                                        <option value="viewer">Viewer (solo lectura)</option>
+                                        <option value="operator">Operator (controles + config cultivo)</option>
+                                        <option value="admin">Admin (todo)</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; align-items: flex-end;">
+                                    <button class="btn-primary" onclick="createUser()">Crear usuario</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-title">Usuarios activos</div>
+                        <div class="table-wrap" style="margin-top: 8px;">
+                            <table class="data" id="users-table">
+                                <thead>
+                                    <tr>
+                                        <th>Usuario</th>
+                                        <th>Rol</th>
+                                        <th>Ultimo login</th>
+                                        <th style="text-align: right;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-tbody">
+                                    <tr><td colspan="4" class="text-muted" style="text-align: center; padding: 24px;">Cargando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Account Panel (self service) -->
+                <div class="settings-panel" id="panel-account">
+                    <div class="card fade-in">
+                        <div class="section-title" style="margin-top: 0;">Mi cuenta</div>
+
+                        {% if user.is_authenticated %}
+                        <div style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-secondary); line-height: 1.8; margin-bottom: 20px;">
+                            <div>Usuario: <span style="color: var(--text-primary);">{{ user.username }}</span></div>
+                            <div>Rol: <span style="color: var(--text-primary);">{{ user.role }}</span></div>
+                        </div>
+                        {% endif %}
+
+                        <div class="section-title">Cambiar contrasenya</div>
+                        <div class="form-group">
+                            <label class="form-label">Nueva contrasenya</label>
+                            <input type="password" class="form-input" id="acc-new-pass" autocomplete="new-password" placeholder="min. 6 caracteres">
+                            <div class="form-hint">Minimo 6 caracteres. La sesion no se cierra automaticamente.</div>
+                        </div>
+                        <div class="gap-row mt-4">
+                            <button class="btn-primary" onclick="changeOwnPassword()">Actualizar contrasenya</button>
+                            <a href="/logout" class="btn-secondary" style="text-decoration: none;">Cerrar sesion</a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -300,8 +394,10 @@ socket.on('disconnect', () => {
 function showPanel(name) {
     document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.settings-nav-item').forEach(b => b.classList.remove('active'));
-    document.getElementById('panel-' + name).classList.add('active');
+    const panel = document.getElementById('panel-' + name);
+    if (panel) panel.classList.add('active');
     event.currentTarget.classList.add('active');
+    if (name === 'users') loadUsers();
 }
 
 // --- Load thresholds ---
@@ -421,6 +517,123 @@ function showToast(message, type) {
     toast.innerHTML = '<span>' + message + '</span>';
     container.appendChild(toast);
     setTimeout(() => { toast.style.animation = 'toast-out 0.3s forwards'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+// --- Users management (admin only) ---
+const CURRENT_USER_ID = {{ user.user_id|tojson if user.is_authenticated else 'null' }};
+
+function loadUsers() {
+    fetch('/api/users')
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(users => {
+            const tbody = document.getElementById('users-tbody');
+            if (!tbody) return;
+            if (!Array.isArray(users) || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:24px;">Sin usuarios</td></tr>';
+                return;
+            }
+            tbody.innerHTML = users.map(u => {
+                const isSelf = u.id === CURRENT_USER_ID;
+                const last = u.last_login ? u.last_login.replace('T', ' ').slice(0, 16) : '—';
+                const roleOptions = ['admin', 'operator', 'viewer']
+                    .map(r => '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' + r + '</option>').join('');
+                return '<tr data-user-id="' + u.id + '">' +
+                    '<td style="color: var(--text-primary); font-weight: 500;">' + u.username + (isSelf ? ' <span class="text-muted" style="font-family:var(--font-mono);font-size:0.7rem;">(tu)</span>' : '') + '</td>' +
+                    '<td><select class="form-select" style="width:auto;padding:4px 28px 4px 10px;font-size:0.78rem;" onchange="updateUserRole(' + u.id + ', this.value)">' + roleOptions + '</select></td>' +
+                    '<td><code style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-muted);">' + last + '</code></td>' +
+                    '<td style="text-align: right;">' +
+                        '<button class="btn-secondary" style="padding:4px 10px;font-size:0.72rem;margin-right:4px;" onclick="resetUserPassword(' + u.id + ', \'' + u.username + '\')">Reset pass</button>' +
+                        (isSelf ? '' : '<button class="btn-secondary" style="padding:4px 10px;font-size:0.72rem;color:var(--red);border-color:rgba(239,68,68,0.25);" onclick="deactivateUser(' + u.id + ', \'' + u.username + '\')">Desactivar</button>') +
+                    '</td>' +
+                    '</tr>';
+            }).join('');
+        })
+        .catch(err => {
+            const tbody = document.getElementById('users-tbody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:24px;">Error: ' + err + '</td></tr>';
+        });
+}
+
+function createUser() {
+    const username = document.getElementById('new-user-username').value.trim();
+    const password = document.getElementById('new-user-password').value;
+    const role = document.getElementById('new-user-role').value;
+    if (!username || !password) { showToast('Usuario y contrasenya requeridos', 'error'); return; }
+    if (password.length < 6) { showToast('Contrasenya muy corta (min. 6)', 'error'); return; }
+    fetch('/api/users', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password, role})
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast('Usuario "' + username + '" creado', 'success');
+            document.getElementById('new-user-username').value = '';
+            document.getElementById('new-user-password').value = '';
+            loadUsers();
+        } else {
+            showToast(res.error || 'Error al crear', 'error');
+        }
+    })
+    .catch(() => showToast('Error de red', 'error'));
+}
+
+function updateUserRole(userId, newRole) {
+    fetch('/api/users/' + userId + '/role', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({role: newRole})
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) showToast('Rol actualizado', 'success');
+        else { showToast(res.error || 'Error', 'error'); loadUsers(); }
+    })
+    .catch(() => showToast('Error de red', 'error'));
+}
+
+function resetUserPassword(userId, username) {
+    const pass = prompt('Nueva contrasenya para "' + username + '" (min. 6):');
+    if (!pass) return;
+    if (pass.length < 6) { showToast('Contrasenya muy corta', 'error'); return; }
+    fetch('/api/users/' + userId + '/password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: pass})
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) showToast('Contrasenya actualizada', 'success');
+        else showToast(res.error || 'Error', 'error');
+    });
+}
+
+function deactivateUser(userId, username) {
+    if (!confirm('Desactivar usuario "' + username + '"? No podra iniciar sesion.')) return;
+    fetch('/api/users/' + userId, {method: 'DELETE'})
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) { showToast('Usuario desactivado', 'success'); loadUsers(); }
+        else showToast(res.error || 'Error', 'error');
+    });
+}
+
+function changeOwnPassword() {
+    const pass = document.getElementById('acc-new-pass').value;
+    if (!pass || pass.length < 6) { showToast('Contrasenya muy corta (min. 6)', 'error'); return; }
+    fetch('/api/users/' + CURRENT_USER_ID + '/password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: pass})
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast('Contrasenya actualizada', 'success');
+            document.getElementById('acc-new-pass').value = '';
+        } else showToast(res.error || 'Error', 'error');
+    });
 }
 </script>
 </body>

@@ -1,7 +1,8 @@
 import sqlite3
 import os
 import math
-from data.models import SCHEMA, DEFAULT_CONFIG, STAGE_THRESHOLDS
+from werkzeug.security import generate_password_hash, check_password_hash
+from data.models import SCHEMA, DEFAULT_CONFIG, STAGE_THRESHOLDS, VALID_ROLES
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "greenhouse.db")
 
@@ -19,6 +20,10 @@ class Database:
     def _init_db(self):
         conn = self._get_conn()
         conn.executescript(SCHEMA)
+        # Migracion: columna user_id en actuator_events para DBs creadas antes del multi-user
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(actuator_events)").fetchall()]
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE actuator_events ADD COLUMN user_id INTEGER")
         # Insertar config por defecto si no existe
         for key, value in DEFAULT_CONFIG.items():
             conn.execute(
@@ -67,29 +72,134 @@ class Database:
 
     # --- Eventos de actuadores ---
 
-    def log_actuator_event(self, actuator, action, triggered_by="manual"):
+    def log_actuator_event(self, actuator, action, triggered_by="manual", user_id=None):
         """Registra un evento de actuador."""
         conn = self._get_conn()
         conn.execute(
-            "INSERT INTO actuator_events (actuator, action, triggered_by) VALUES (?, ?, ?)",
-            (actuator, action, triggered_by)
+            "INSERT INTO actuator_events (actuator, action, triggered_by, user_id) VALUES (?, ?, ?, ?)",
+            (actuator, action, triggered_by, user_id)
         )
         conn.commit()
         conn.close()
 
     def get_actuator_events(self, hours=24, limit=200):
-        """Obtiene eventos de actuadores de las ultimas N horas."""
+        """Obtiene eventos de actuadores con nombre de usuario si aplica."""
         conn = self._get_conn()
         rows = conn.execute(
-            """SELECT timestamp, actuator, action, triggered_by
-               FROM actuator_events
-               WHERE timestamp >= datetime('now', 'localtime', ?)
-               ORDER BY timestamp DESC
+            """SELECT e.timestamp, e.actuator, e.action, e.triggered_by,
+                      e.user_id, u.username
+               FROM actuator_events e
+               LEFT JOIN users u ON u.id = e.user_id
+               WHERE e.timestamp >= datetime('now', 'localtime', ?)
+               ORDER BY e.timestamp DESC
                LIMIT ?""",
             (f"-{hours} hours", limit)
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    # --- Usuarios ---
+
+    def create_user(self, username, password, role="viewer"):
+        """Crea un usuario. Devuelve su id, o None si el username ya existe."""
+        if role not in VALID_ROLES:
+            raise ValueError(f"Rol invalido: {role}")
+        if not username or not password:
+            raise ValueError("Username y password son requeridos")
+        conn = self._get_conn()
+        try:
+            cur = conn.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                (username.strip(), generate_password_hash(password), role)
+            )
+            conn.commit()
+            return cur.lastrowid
+        except sqlite3.IntegrityError:
+            return None
+        finally:
+            conn.close()
+
+    def get_user_by_username(self, username):
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ? AND active = 1",
+            (username,)
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_user_by_id(self, user_id):
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def verify_password(self, user_id, password):
+        user = self.get_user_by_id(user_id)
+        if not user or not user["active"]:
+            return False
+        return check_password_hash(user["password_hash"], password)
+
+    def list_users(self, include_inactive=False):
+        conn = self._get_conn()
+        sql = "SELECT id, username, role, active, created_at, last_login FROM users"
+        if not include_inactive:
+            sql += " WHERE active = 1"
+        sql += " ORDER BY created_at ASC"
+        rows = conn.execute(sql).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def count_admins(self):
+        """Cuenta admins activos. Usado para no dejar el sistema sin admins."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND active = 1"
+        ).fetchone()
+        conn.close()
+        return row["n"] if row else 0
+
+    def update_user_password(self, user_id, password):
+        if not password:
+            raise ValueError("Password requerida")
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(password), user_id)
+        )
+        conn.commit()
+        conn.close()
+
+    def update_user_role(self, user_id, role):
+        if role not in VALID_ROLES:
+            raise ValueError(f"Rol invalido: {role}")
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE users SET role = ? WHERE id = ?",
+            (role, user_id)
+        )
+        conn.commit()
+        conn.close()
+
+    def set_user_active(self, user_id, active):
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE users SET active = ? WHERE id = ?",
+            (1 if active else 0, user_id)
+        )
+        conn.commit()
+        conn.close()
+
+    def update_last_login(self, user_id):
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE users SET last_login = datetime('now', 'localtime') WHERE id = ?",
+            (user_id,)
+        )
+        conn.commit()
+        conn.close()
 
     # --- Configuracion ---
 

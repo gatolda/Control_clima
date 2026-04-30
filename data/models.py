@@ -13,7 +13,18 @@ CREATE TABLE IF NOT EXISTS actuator_events (
     timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
     actuator TEXT NOT NULL,
     action TEXT NOT NULL,
-    triggered_by TEXT DEFAULT 'manual'
+    triggered_by TEXT DEFAULT 'manual',
+    user_id INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'viewer',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    last_login DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS config (
@@ -52,11 +63,16 @@ CREATE TABLE IF NOT EXISTS camera_events (
 
 CREATE INDEX IF NOT EXISTS idx_sensor_timestamp ON sensor_readings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actuator_timestamp ON actuator_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_actuator_user ON actuator_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_soil_timestamp ON soil_readings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_soil_zone ON soil_readings(zone_id);
 CREATE INDEX IF NOT EXISTS idx_irrigation_timestamp ON irrigation_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_irrigation_zone ON irrigation_events(zone_id);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 """
+
+# Roles: admin (todo), operator (controles+config de cultivo, no usuarios), viewer (solo lectura)
+VALID_ROLES = ("admin", "operator", "viewer")
 
 # Configuracion por defecto al inicializar
 DEFAULT_CONFIG = {

@@ -112,10 +112,11 @@
                         <th>Actuador</th>
                         <th>Accion</th>
                         <th>Disparado por</th>
+                        <th>Usuario</th>
                     </tr>
                 </thead>
                 <tbody id="events-body">
-                    <tr><td colspan="4" class="text-muted" style="text-align: center; padding: 30px;">Cargando eventos...</td></tr>
+                    <tr><td colspan="5" class="text-muted" style="text-align: center; padding: 30px;">Cargando eventos...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -223,7 +224,7 @@ function loadEvents() {
         .then(events => {
             const tbody = document.getElementById('events-body');
             if (!Array.isArray(events) || events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:30px;">No hay eventos en las ultimas 24 horas</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:30px;">No hay eventos en las ultimas 24 horas</td></tr>';
                 return;
             }
 
@@ -231,11 +232,13 @@ function loadEvents() {
                 const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--';
                 const accion = (ev.action || ev.accion || '').toLowerCase();
                 const trigger = ev.triggered_by || ev.trigger || 'manual';
+                const who = ev.username ? ev.username : (trigger === 'manual' ? '—' : trigger);
                 return '<tr>' +
                     '<td>' + time + '</td>' +
                     '<td>' + (ev.actuator || ev.nombre || '').replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) + '</td>' +
                     '<td><span class="event-tag ' + (accion === 'on' ? 'on' : 'off') + '">' + accion.toUpperCase() + '</span></td>' +
                     '<td><span class="event-tag ' + trigger + '">' + trigger + '</span></td>' +
+                    '<td><code style="color:var(--text-secondary);font-size:0.75rem;">' + who + '</code></td>' +
                     '</tr>';
             }).join('');
         })

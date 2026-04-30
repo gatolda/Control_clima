@@ -1,8 +1,8 @@
 # app.py
-from flask import Flask, render_template, jsonify, request, redirect, url_for
+from functools import wraps
+from flask import Flask, render_template, jsonify, request, redirect, url_for, abort
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
 from core.config_loader import ConfigLoader
 from core.sensor_reader import SensorReader
 from core.actuator_manager import ActuatorManager
@@ -30,28 +30,65 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
-# Credenciales desde variables de entorno (.env)
-USERS = {
-    os.environ.get("ADMIN_USER", "admin"): generate_password_hash(os.environ["ADMIN_PASSWORD"])
-}
-
-class User(UserMixin):
-    def __init__(self, username):
-        self.id = username
-
-@login_manager.user_loader
-def load_user(username):
-    if username in USERS:
-        return User(username)
-    return None
-
-# Inicializar hardware
+# Inicializar hardware + DB (DB antes que nada para poder bootstrap admin)
 inicializar_gpio()
 config = ConfigLoader()
 config.cargar_configuracion()
 sensor_reader = SensorReader(config)
 actuator_manager = ActuatorManager(config)
 db = Database()
+
+# Bootstrap: si la tabla users esta vacia, crear el admin desde .env
+def _bootstrap_admin():
+    if not db.list_users(include_inactive=True):
+        admin_user = os.environ.get("ADMIN_USER", "admin")
+        admin_pass = os.environ.get("ADMIN_PASSWORD")
+        if not admin_pass:
+            print("[auth] WARN: ADMIN_PASSWORD no definida y no hay usuarios en la DB. Login deshabilitado hasta crear uno.")
+            return
+        uid = db.create_user(admin_user, admin_pass, role="admin")
+        if uid:
+            print(f"[auth] Admin inicial creado: {admin_user} (id={uid})")
+_bootstrap_admin()
+
+class User(UserMixin):
+    def __init__(self, user_id, username, role):
+        self.id = str(user_id)
+        self.user_id = int(user_id)
+        self.username = username
+        self.role = role
+
+    @property
+    def is_admin(self):
+        return self.role == "admin"
+
+    @property
+    def can_write(self):
+        return self.role in ("admin", "operator")
+
+@login_manager.user_loader
+def load_user(user_id):
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        return None
+    row = db.get_user_by_id(uid)
+    if row and row.get("active"):
+        return User(row["id"], row["username"], row["role"])
+    return None
+
+# --- Decoradores de rol ---
+def role_required(*roles):
+    """Protege un endpoint HTTP. El usuario debe tener alguno de los roles listados."""
+    def decorator(fn):
+        @wraps(fn)
+        @login_required
+        def wrapper(*args, **kwargs):
+            if not current_user.is_authenticated or current_user.role not in roles:
+                abort(403)
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
 irrigation_manager = IrrigationManager(config, sensor_reader, actuator_manager, db)
 camera_manager = CameraManager(config, db)
 climate_controller = ClimateController(config, sensor_reader, actuator_manager, db)
@@ -112,8 +149,10 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        if username in USERS and check_password_hash(USERS[username], password):
-            login_user(User(username), remember=True)
+        row = db.get_user_by_username(username)
+        if row and db.verify_password(row["id"], password):
+            login_user(User(row["id"], row["username"], row["role"]), remember=True)
+            db.update_last_login(row["id"])
             return redirect(request.args.get("next") or url_for("index"))
         error = "Usuario o contrasenya incorrectos"
     return render_template("login.html", error=error)
@@ -174,7 +213,7 @@ def get_config():
     return jsonify(db.get_all_config())
 
 @app.route("/api/config", methods=["POST"])
-@login_required
+@role_required("admin", "operator")
 def update_config():
     data = request.get_json()
     for key, value in data.items():
@@ -214,7 +253,7 @@ def irrigation_history():
     return jsonify(events)
 
 @app.route("/api/irrigation/manual", methods=["POST"])
-@login_required
+@role_required("admin", "operator")
 def irrigation_manual():
     data = request.get_json()
     zone_id = data.get("zone_id")
@@ -225,7 +264,7 @@ def irrigation_manual():
     return jsonify(result)
 
 @app.route("/api/irrigation/stop", methods=["POST"])
-@login_required
+@role_required("admin", "operator")
 def irrigation_stop():
     data = request.get_json()
     zone_id = data.get("zone_id")
@@ -256,7 +295,7 @@ def soil_history():
 # --- Camara API ---
 
 @app.route("/api/camera/capture", methods=["POST"])
-@login_required
+@role_required("admin", "operator")
 def camera_capture():
     result = camera_manager.capture_and_analyze()
     return jsonify(result)
@@ -286,7 +325,7 @@ def climate_status():
     return jsonify(climate_controller.get_status())
 
 @app.route("/api/climate/mode", methods=["POST"])
-@login_required
+@role_required("admin", "operator")
 def climate_set_mode():
     data = request.get_json()
     mode = data.get("mode")
@@ -297,7 +336,7 @@ def climate_set_mode():
     return jsonify({"ok": True, "mode": mode})
 
 @app.route("/api/climate/stage", methods=["POST"])
-@login_required
+@role_required("admin", "operator")
 def climate_set_stage():
     data = request.get_json()
     stage = data.get("stage")
@@ -323,13 +362,101 @@ def climate_stages():
     return jsonify(stages)
 
 @app.route("/api/climate/light", methods=["POST"])
-@login_required
+@role_required("admin", "operator")
 def climate_set_light():
     data = request.get_json()
     light_on_hour = data.get("light_on_hour")
     if light_on_hour is not None:
         db.set_config("light_on_hour", str(int(light_on_hour)))
     return jsonify({"ok": True})
+
+# --- Users API (admin) ---
+
+def _user_dto(u):
+    """Serializa un usuario omitiendo el password_hash."""
+    return {
+        "id": u["id"],
+        "username": u["username"],
+        "role": u["role"],
+        "active": bool(u["active"]),
+        "created_at": u.get("created_at"),
+        "last_login": u.get("last_login"),
+    }
+
+@app.route("/api/users", methods=["GET"])
+@role_required("admin")
+def users_list():
+    include_inactive = request.args.get("all") == "1"
+    return jsonify([_user_dto(u) for u in db.list_users(include_inactive=include_inactive)])
+
+@app.route("/api/users", methods=["POST"])
+@role_required("admin")
+def users_create():
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    role = data.get("role") or "viewer"
+    if not username or not password:
+        return jsonify({"ok": False, "error": "username y password requeridos"}), 400
+    try:
+        uid = db.create_user(username, password, role)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    if not uid:
+        return jsonify({"ok": False, "error": "Username ya existe"}), 409
+    return jsonify({"ok": True, "id": uid})
+
+@app.route("/api/users/<int:user_id>", methods=["DELETE"])
+@role_required("admin")
+def users_deactivate(user_id):
+    target = db.get_user_by_id(user_id)
+    if not target:
+        return jsonify({"ok": False, "error": "Usuario no encontrado"}), 404
+    if user_id == current_user.user_id:
+        return jsonify({"ok": False, "error": "No podes desactivar tu propia cuenta"}), 400
+    # Evitar dejar el sistema sin admins
+    if target["role"] == "admin" and db.count_admins() <= 1:
+        return jsonify({"ok": False, "error": "No queda ningun otro admin activo"}), 400
+    db.set_user_active(user_id, False)
+    return jsonify({"ok": True})
+
+@app.route("/api/users/<int:user_id>/password", methods=["POST"])
+@login_required
+def users_update_password(user_id):
+    # Admin puede cambiar cualquier password; usuario comun solo la propia
+    if not (current_user.is_admin or current_user.user_id == user_id):
+        abort(403)
+    data = request.get_json() or {}
+    password = data.get("password") or ""
+    if len(password) < 6:
+        return jsonify({"ok": False, "error": "Password debe tener al menos 6 caracteres"}), 400
+    try:
+        db.update_user_password(user_id, password)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True})
+
+@app.route("/api/users/<int:user_id>/role", methods=["POST"])
+@role_required("admin")
+def users_update_role(user_id):
+    data = request.get_json() or {}
+    new_role = data.get("role")
+    target = db.get_user_by_id(user_id)
+    if not target:
+        return jsonify({"ok": False, "error": "Usuario no encontrado"}), 404
+    # No degradar al ultimo admin
+    if target["role"] == "admin" and new_role != "admin" and db.count_admins() <= 1:
+        return jsonify({"ok": False, "error": "No queda ningun otro admin activo"}), 400
+    try:
+        db.update_user_role(user_id, new_role)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True})
+
+# Inyectar current_user en el contexto de todos los templates
+@app.context_processor
+def inject_user():
+    return {"user": current_user}
 
 # --- Socket.IO Events ---
 
@@ -345,8 +472,20 @@ def handle_connect():
 def handle_disconnect():
     print("Cliente desconectado")
 
+def _require_write():
+    """Valida que el usuario del socket pueda escribir. Emite alerta si no."""
+    if not current_user.is_authenticated:
+        emit("alert", {"type": "auth", "message": "Debes iniciar sesion"})
+        return False
+    if not getattr(current_user, "can_write", False):
+        emit("alert", {"type": "denied", "message": "Tu usuario es de solo lectura"})
+        return False
+    return True
+
 @socketio.on("manual_irrigate")
 def handle_manual_irrigate(data):
+    if not _require_write():
+        return
     zone_id = data.get("zone_id")
     duration = data.get("duration_minutes", 5)
     result = irrigation_manager.manual_irrigate(zone_id, duration)
@@ -356,12 +495,16 @@ def handle_manual_irrigate(data):
 
 @socketio.on("stop_irrigation")
 def handle_stop_irrigation(data):
+    if not _require_write():
+        return
     zone_id = data.get("zone_id")
     irrigation_manager.close_valve(zone_id, reason="manual_stop")
     socketio.emit("irrigation_status", irrigation_manager.get_status())
 
 @socketio.on("set_climate_mode")
 def handle_set_climate_mode(data):
+    if not _require_write():
+        return
     mode = data.get("mode")
     if mode in ("auto", "manual"):
         climate_controller.set_mode(mode)
@@ -369,6 +512,8 @@ def handle_set_climate_mode(data):
 
 @socketio.on("set_stage")
 def handle_set_stage(data):
+    if not _require_write():
+        return
     stage = data.get("stage")
     result = climate_controller.set_stage(stage)
     if result.get("ok"):
@@ -376,6 +521,8 @@ def handle_set_stage(data):
 
 @socketio.on("toggle_actuador")
 def handle_toggle(data):
+    if not _require_write():
+        return
     nombre = data.get("nombre")
     accion = data.get("accion")
     if accion == "on":
@@ -386,7 +533,8 @@ def handle_toggle(data):
         result = {"ok": False, "error": "Accion desconocida"}
 
     if result.get("ok"):
-        db.log_actuator_event(nombre, accion, triggered_by="manual")
+        uid = getattr(current_user, "user_id", None)
+        db.log_actuator_event(nombre, accion, triggered_by="manual", user_id=uid)
         cloud_agent.record_actuator_event(nombre, accion, triggered_by="manual")
     else:
         emit("alert", {"type": "conflict", "message": result.get("error", "")})

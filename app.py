@@ -231,6 +231,64 @@ def get_history():
     readings = db.get_readings(hours=hours)
     return jsonify(readings)
 
+# --- Per-sensor detalle (drill-down desde el dashboard) ---
+
+SENSOR_META = {
+    "temp": {"label": "Temperatura", "unit": "°C", "color": "rgb(239, 68, 68)", "max_chart": 50,
+             "ranges": {"good": [18, 28], "warn_low": 12, "warn_high": 32}},
+    "hum":  {"label": "Humedad", "unit": "%", "color": "rgb(59, 130, 246)", "max_chart": 100,
+             "ranges": {"good": [40, 70], "warn_low": 30, "warn_high": 85}},
+    "co2":  {"label": "CO₂", "unit": "ppm", "color": "rgb(167, 139, 250)", "max_chart": 2000,
+             "ranges": {"good": [400, 1200], "warn_low": 300, "warn_high": 1500}},
+    "vpd":  {"label": "VPD", "unit": "kPa", "color": "rgb(102, 217, 232)", "max_chart": 2.5,
+             "ranges": {"good": [0.6, 1.5], "warn_low": 0.4, "warn_high": 2.0}},
+    "soil": {"label": "Humedad Suelo", "unit": "%", "color": "rgb(72, 210, 143)", "max_chart": 100,
+             "ranges": {"good": [40, 70], "warn_low": 25, "warn_high": 85}},
+}
+
+VARIABLE_TO_COL = {"temp": "temperature", "hum": "humidity", "co2": "co2", "vpd": "vpd"}
+
+@app.route("/sensor/<variable>")
+@login_required
+def sensor_detail_page(variable):
+    if variable not in SENSOR_META:
+        abort(404)
+    return render_template("sensor.html", variable=variable, meta=SENSOR_META[variable])
+
+@app.route("/api/sensor-history/<variable>")
+@login_required
+def api_sensor_history(variable):
+    if variable not in SENSOR_META:
+        abort(404)
+    hours = request.args.get("hours", 24, type=int)
+    out = []
+    if variable == "soil":
+        # zona por defecto: zona_1, variable humedad_suelo
+        zone = request.args.get("zone", "zona_1")
+        rows = db.get_soil_readings(zone_id=zone, hours=hours)
+        for r in rows:
+            if r.get("variable") == "humedad_suelo" and r.get("value") is not None:
+                out.append({"timestamp": r["timestamp"], "value": r["value"]})
+    else:
+        col = VARIABLE_TO_COL[variable]
+        rows = db.get_readings(hours=hours)
+        for r in rows:
+            v = r.get(col)
+            if v is not None:
+                out.append({"timestamp": r["timestamp"], "value": v})
+    # Stats
+    values = [p["value"] for p in out]
+    stats = None
+    if values:
+        stats = {
+            "min": min(values),
+            "max": max(values),
+            "avg": sum(values) / len(values),
+            "count": len(values),
+            "current": values[-1] if values else None,
+        }
+    return jsonify({"meta": SENSOR_META[variable], "points": out, "stats": stats, "hours": hours})
+
 @app.route("/api/events")
 @login_required
 def get_events():

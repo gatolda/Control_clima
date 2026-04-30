@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark" data-density="normal"{% if user.is_authenticated %} data-role="{{ user.role }}"{% endif %}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ meta.label }} — Control Climatico</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icon.svg') }}">
+    <meta name="theme-color" content="#0a0a0b">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+        (function() {
+            const t = localStorage.getItem('theme');
+            const d = localStorage.getItem('density');
+            if (t) document.documentElement.setAttribute('data-theme', t);
+            if (d) document.documentElement.setAttribute('data-density', d);
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+            </div>
+            <div class="sidebar-brand-text">
+                <div class="sidebar-brand-title">Control Climatico</div>
+                <div class="sidebar-brand-subtitle">Invernadero</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="sidebar-nav-section">Monitoreo</div>
+            <a href="/" class="nav-item active"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+            <a href="/calendar" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span>Calendario</span></a>
+            <a href="/cycles" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/></svg><span>Ciclos</span></a>
+            <a href="/diagnostics" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Diagnosticos</span></a>
+            <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/inventory" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>Inventario</span></a>
+            <a href="/settings" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg><span>Ajustes</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="status-dot" id="conn-dot"></div>
+            <span class="status-text" id="conn-text">Conectando</span>
+            {% if user.is_authenticated %}<span class="role-chip role-{{ user.role }}">{{ user.role }}</span>{% endif %}
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <a href="/" class="back-link">← Dashboard</a>
+                <h1 class="page-title">{{ meta.label }}</h1>
+                <div class="page-subtitle">Histórico, estadísticas y tendencia</div>
+            </div>
+            <div class="page-meta">
+                <span id="page-time">--:--:--</span>
+            </div>
+        </div>
+
+        <!-- Hero stat -->
+        <section class="section">
+            <div class="sensor-hero" id="sensor-hero">
+                <div class="sensor-hero-current">
+                    <div class="sensor-hero-label">Actual</div>
+                    <div class="sensor-hero-value">
+                        <span id="hero-current">--</span>
+                        <span class="sensor-hero-unit">{{ meta.unit }}</span>
+                    </div>
+                    <div class="sensor-hero-trend" id="hero-trend"></div>
+                </div>
+                <div class="sensor-hero-stats" id="hero-stats">
+                    <div class="hero-stat"><div class="hero-stat-label">Min</div><div class="hero-stat-value" id="stat-min">--</div></div>
+                    <div class="hero-stat"><div class="hero-stat-label">Max</div><div class="hero-stat-value" id="stat-max">--</div></div>
+                    <div class="hero-stat"><div class="hero-stat-label">Promedio</div><div class="hero-stat-value" id="stat-avg">--</div></div>
+                    <div class="hero-stat"><div class="hero-stat-label">Lecturas</div><div class="hero-stat-value" id="stat-count">--</div></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Range + chart -->
+        <section class="section">
+            <div class="section-head">
+                <div class="section-title">Histórico</div>
+                <div class="chart-range" id="range-buttons">
+                    <button data-h="1">1h</button>
+                    <button data-h="6">6h</button>
+                    <button data-h="24" class="active">24h</button>
+                    <button data-h="168">7d</button>
+                    <button data-h="720">30d</button>
+                </div>
+            </div>
+            <div class="card chart">
+                <div class="chart-body sensor-chart-body" id="chart-body">
+                    <canvas id="historyChart"></canvas>
+                    <div class="chart-tooltip" id="chart-tooltip">
+                        <div class="chart-tooltip-time" id="tt-time">--:--</div>
+                        <div class="chart-tooltip-row"><span class="chart-tooltip-label" style="color: {{ meta.color }};">{{ meta.label }}</span><span class="chart-tooltip-value" id="tt-value">--</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script>
+const VARIABLE = {{ variable | tojson }};
+const META = {{ meta | tojson }};
+let currentHours = 24;
+let history = [];
+let chartRect = null;
+
+// Clock
+function tick() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    document.getElementById('page-time').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+tick(); setInterval(tick, 1000);
+
+// Socket connection status
+const socket = io();
+socket.on('connect', () => {
+    document.getElementById('conn-dot').className = 'status-dot online';
+    document.getElementById('conn-text').textContent = 'En linea';
+});
+socket.on('disconnect', () => {
+    document.getElementById('conn-dot').className = 'status-dot offline';
+    document.getElementById('conn-text').textContent = 'Desconectado';
+});
+
+// Live updates from socket - extrae el valor de la variable correcta
+socket.on('sensor_data', data => {
+    let v = null;
+    if (VARIABLE === 'temp') v = (data.temperatura_humedad || {}).temperature;
+    else if (VARIABLE === 'hum') v = (data.temperatura_humedad || {}).humidity;
+    else if (VARIABLE === 'co2') v = (data.co2 || {}).co2;
+    else if (VARIABLE === 'vpd') v = (data.vpd || {}).vpd;
+    if (v != null) updateHero(v);
+});
+socket.on('soil_data', data => {
+    if (VARIABLE !== 'soil') return;
+    for (const z of Object.values(data)) {
+        if (z.humedad_suelo != null) { updateHero(z.humedad_suelo); break; }
+    }
+});
+
+function updateHero(value) {
+    const fmt = VARIABLE === 'co2' ? Math.round(value).toString() :
+                (VARIABLE === 'vpd' ? value.toFixed(2) : value.toFixed(1));
+    document.getElementById('hero-current').textContent = fmt;
+    // Trend vs avg
+    const avg = parseFloat(document.getElementById('stat-avg').dataset.value || NaN);
+    const trendEl = document.getElementById('hero-trend');
+    if (!isNaN(avg)) {
+        const diff = value - avg;
+        const pct = avg !== 0 ? (diff / avg * 100) : 0;
+        const arrow = diff > 0 ? '▲' : (diff < 0 ? '▼' : '─');
+        const color = Math.abs(pct) < 2 ? 'var(--text-muted)' : (diff > 0 ? 'var(--red)' : 'var(--blue)');
+        trendEl.innerHTML = `<span style="color:${color};">${arrow} ${Math.abs(pct).toFixed(1)}% vs promedio</span>`;
+    }
+}
+
+function loadHistory(hours) {
+    currentHours = hours;
+    fetch(`/api/sensor-history/${VARIABLE}?hours=${hours}`)
+        .then(r => r.json())
+        .then(data => {
+            history = data.points || [];
+            const stats = data.stats;
+            if (stats) {
+                const fmt = (v) => v == null ? '--' :
+                    (VARIABLE === 'co2' ? Math.round(v).toString() :
+                     VARIABLE === 'vpd' ? v.toFixed(2) : v.toFixed(1));
+                document.getElementById('stat-min').textContent = fmt(stats.min) + ' ' + META.unit;
+                document.getElementById('stat-max').textContent = fmt(stats.max) + ' ' + META.unit;
+                document.getElementById('stat-avg').textContent = fmt(stats.avg) + ' ' + META.unit;
+                document.getElementById('stat-avg').dataset.value = stats.avg;
+                document.getElementById('stat-count').textContent = stats.count;
+                if (stats.current != null) updateHero(stats.current);
+            } else {
+                ['stat-min','stat-max','stat-avg','stat-count'].forEach(id => document.getElementById(id).textContent = '--');
+            }
+            requestAnimationFrame(drawChart);
+        });
+}
+
+function drawChart(highlightIdx) {
+    const canvas = document.getElementById('historyChart');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px'; canvas.style.height = rect.height + 'px';
+    ctx.scale(dpr, dpr);
+
+    const W = rect.width, H = rect.height;
+    const pad = { top: 16, right: 16, bottom: 28, left: 56 };
+    const plotW = W - pad.left - pad.right;
+    const plotH = H - pad.top - pad.bottom;
+    chartRect = { W, H, pad, plotW, plotH };
+
+    ctx.clearRect(0, 0, W, H);
+
+    if (history.length < 2) {
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+        ctx.font = '13px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Sin datos suficientes en este rango', W / 2, H / 2);
+        return;
+    }
+
+    // Calcular rango Y dinamico (no usar maxVal fijo)
+    const values = history.map(p => p.value);
+    let yMin = Math.min(...values);
+    let yMax = Math.max(...values);
+    const padY = (yMax - yMin) * 0.1 || 1;
+    yMin = yMin - padY;
+    yMax = yMax + padY;
+
+    // Banda óptima (verde) si meta tiene ranges.good
+    if (META.ranges && META.ranges.good) {
+        const [gLow, gHigh] = META.ranges.good;
+        const yLow = pad.top + plotH - ((Math.min(gHigh, yMax) - yMin) / (yMax - yMin)) * plotH;
+        const yHigh = pad.top + plotH - ((Math.max(gLow, yMin) - yMin) / (yMax - yMin)) * plotH;
+        if (gHigh >= yMin && gLow <= yMax) {
+            ctx.fillStyle = 'rgba(72, 210, 143, 0.06)';
+            ctx.fillRect(pad.left, yLow, plotW, yHigh - yLow);
+        }
+    }
+
+    // Gridlines + Y labels
+    const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--text-dim').trim();
+    const labelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+    ctx.strokeStyle = gridColor + '33';
+    ctx.lineWidth = 1;
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.fillStyle = labelColor;
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) {
+        const y = pad.top + (plotH / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(W - pad.right, y);
+        ctx.stroke();
+        const v = yMax - ((yMax - yMin) / 4) * i;
+        const lbl = VARIABLE === 'co2' ? Math.round(v).toString() :
+                    (VARIABLE === 'vpd' ? v.toFixed(2) : v.toFixed(1));
+        ctx.fillText(lbl + ' ' + META.unit, pad.left - 8, y + 3);
+    }
+
+    // X axis labels (3-5 timestamps)
+    ctx.textAlign = 'center';
+    const labelCount = 5;
+    for (let i = 0; i <= labelCount; i++) {
+        const x = pad.left + (i / labelCount) * plotW;
+        const idx = Math.floor((i / labelCount) * (history.length - 1));
+        const ts = history[idx].timestamp;
+        const d = new Date(ts);
+        const lbl = currentHours <= 24
+            ? String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+            : String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+        ctx.fillText(lbl, x, H - 6);
+    }
+
+    // Area fill + line
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+    grad.addColorStop(0, META.color.replace('rgb', 'rgba').replace(')', ', 0.25)'));
+    grad.addColorStop(1, META.color.replace('rgb', 'rgba').replace(')', ', 0)'));
+
+    ctx.beginPath();
+    history.forEach((p, i) => {
+        const x = pad.left + (i / (history.length - 1)) * plotW;
+        const y = pad.top + plotH - ((p.value - yMin) / (yMax - yMin)) * plotH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(pad.left + plotW, pad.top + plotH);
+    ctx.lineTo(pad.left, pad.top + plotH);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.strokeStyle = META.color;
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    history.forEach((p, i) => {
+        const x = pad.left + (i / (history.length - 1)) * plotW;
+        const y = pad.top + plotH - ((p.value - yMin) / (yMax - yMin)) * plotH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Crosshair
+    if (highlightIdx != null && history[highlightIdx]) {
+        const p = history[highlightIdx];
+        const x = pad.left + (highlightIdx / (history.length - 1)) * plotW;
+        const y = pad.top + plotH - ((p.value - yMin) / (yMax - yMin)) * plotH;
+        ctx.strokeStyle = labelColor + '66';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = META.color;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+// Hover tooltip
+const chartBody = document.getElementById('chart-body');
+const tooltip = document.getElementById('chart-tooltip');
+chartBody.addEventListener('mousemove', (e) => {
+    if (!chartRect || !history.length) return;
+    const rect = chartBody.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (x < chartRect.pad.left || x > chartRect.W - chartRect.pad.right) {
+        tooltip.classList.remove('visible'); drawChart(); return;
+    }
+    const ratio = (x - chartRect.pad.left) / chartRect.plotW;
+    const idx = Math.round(ratio * (history.length - 1));
+    if (idx < 0 || idx >= history.length) { tooltip.classList.remove('visible'); return; }
+    drawChart(idx);
+    const p = history[idx];
+    const d = new Date(p.timestamp);
+    const pad = n => String(n).padStart(2, '0');
+    const time = currentHours <= 24
+        ? pad(d.getHours()) + ':' + pad(d.getMinutes())
+        : pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    document.getElementById('tt-time').textContent = time;
+    const fmt = VARIABLE === 'co2' ? Math.round(p.value).toString() :
+                (VARIABLE === 'vpd' ? p.value.toFixed(2) : p.value.toFixed(1));
+    document.getElementById('tt-value').textContent = fmt + ' ' + META.unit;
+    tooltip.classList.add('visible');
+    const ttW = tooltip.offsetWidth, ttH = tooltip.offsetHeight;
+    let tx = x + 12; if (tx + ttW > chartRect.W) tx = x - ttW - 12;
+    let ty = y - ttH - 8; if (ty < 0) ty = y + 12;
+    tooltip.style.transform = `translate(${tx}px, ${ty}px)`;
+});
+chartBody.addEventListener('mouseleave', () => { tooltip.classList.remove('visible'); drawChart(); });
+
+// Range buttons
+document.getElementById('range-buttons').addEventListener('click', (e) => {
+    if (e.target.tagName !== 'BUTTON') return;
+    document.querySelectorAll('#range-buttons button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    loadHistory(parseInt(e.target.dataset.h));
+});
+
+window.addEventListener('resize', () => drawChart());
+loadHistory(24);
+</script>
+</body>
+</html>

@@ -2424,3 +2424,142 @@ table.data code {
     font-size: 0.66rem;
     letter-spacing: 0.06em;
 }
+
+/* ============================================================
+   SENSOR LINKABLE CARDS + DETAIL PAGE
+   ============================================================ */
+
+/* Convertir sensor card en link (anchor) sin perder el look */
+a.sensor.sensor-link {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    position: relative;
+}
+a.sensor.sensor-link::after {
+    content: '→';
+    position: absolute;
+    top: 16px;
+    right: 18px;
+    font-size: 14px;
+    color: var(--text-dim);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: all 0.2s var(--ease);
+}
+a.sensor.sensor-link:hover::after {
+    opacity: 1;
+    transform: translateX(0);
+    color: var(--accent);
+}
+a.sensor.sensor-link:hover {
+    border-color: var(--border-strong);
+}
+
+/* Back link en sensor detail */
+.back-link {
+    display: inline-block;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-bottom: 6px;
+    transition: color 0.15s;
+}
+.back-link:hover { color: var(--accent); }
+
+/* Hero card de la página /sensor/X */
+.sensor-hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 32px;
+    padding: 28px 32px;
+    background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-surface-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    align-items: center;
+}
+
+@media (max-width: 900px) {
+    .sensor-hero { grid-template-columns: 1fr; }
+}
+
+.sensor-hero-current { min-width: 0; }
+
+.sensor-hero-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.sensor-hero-value {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.sensor-hero-value > span:first-child {
+    font-size: 4rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.sensor-hero-unit {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    color: var(--text-muted);
+}
+
+.sensor-hero-trend {
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+}
+
+.sensor-hero-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(90px, 1fr));
+    gap: 18px;
+}
+
+@media (max-width: 600px) {
+    .sensor-hero-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.hero-stat {
+    text-align: right;
+}
+@media (max-width: 900px) {
+    .hero-stat { text-align: left; }
+}
+
+.hero-stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.hero-stat-value {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Chart body más alto en /sensor/ */
+.sensor-chart-body {
+    height: 380px !important;
+}
+[data-density="compact"] .sensor-chart-body {
+    height: 300px !important;
+}

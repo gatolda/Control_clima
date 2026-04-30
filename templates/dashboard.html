@@ -807,7 +807,10 @@ let chartRect = null;
 
 function drawSparkline(canvasId, points, color, minVal, maxVal) {
     const canvas = document.getElementById(canvasId);
-    if (!canvas || points.length < 2) return;
+    if (!canvas) return;
+    // Filtrar nulls y ceros (lecturas fallidas) para evitar caidas falsas
+    points = (points || []).filter(v => v != null && v > 0);
+    if (points.length < 2) return;
 
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
@@ -1022,9 +1025,12 @@ function loadHistory() {
                 chartData.hum = data.map(d => d.humidity);
                 chartData.co2 = data.map(d => cleanCO2(d.co2));
                 chartData.ts = data.map(d => d.timestamp);
-                liveSpark.temp = chartData.temp.slice(-SPARK_MAX);
-                liveSpark.hum  = chartData.hum.slice(-SPARK_MAX);
-                liveSpark.co2  = chartData.co2.filter(v => v != null).slice(-SPARK_MAX);
+                // Sparklines: filtrar nulls/ceros al sembrar para evitar caidas
+                // verticales falsas cuando hay lecturas fallidas
+                const cleanForSpark = (arr) => arr.filter(v => v != null && v > 0);
+                liveSpark.temp = cleanForSpark(chartData.temp).slice(-SPARK_MAX);
+                liveSpark.hum  = cleanForSpark(chartData.hum).slice(-SPARK_MAX);
+                liveSpark.co2  = cleanForSpark(chartData.co2).slice(-SPARK_MAX);
                 requestAnimationFrame(() => {
                     drawChart();
                     drawAllSparklines();

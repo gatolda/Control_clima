@@ -19,11 +19,19 @@ class Database:
 
     def _init_db(self):
         conn = self._get_conn()
+        # Pre-migracion: si actuator_events ya existe sin user_id, agregar la columna
+        # ANTES de executescript (que tiene el CREATE INDEX sobre user_id y crashea
+        # si la columna no existe en DBs viejas).
+        try:
+            cols = [r["name"] for r in conn.execute(
+                "PRAGMA table_info(actuator_events)"
+            ).fetchall()]
+            if cols and "user_id" not in cols:
+                conn.execute("ALTER TABLE actuator_events ADD COLUMN user_id INTEGER")
+                conn.commit()
+        except sqlite3.OperationalError:
+            pass  # la tabla aun no existe; SCHEMA la creara con la columna
         conn.executescript(SCHEMA)
-        # Migracion: columna user_id en actuator_events para DBs creadas antes del multi-user
-        cols = [r["name"] for r in conn.execute("PRAGMA table_info(actuator_events)").fetchall()]
-        if "user_id" not in cols:
-            conn.execute("ALTER TABLE actuator_events ADD COLUMN user_id INTEGER")
         # Insertar config por defecto si no existe
         for key, value in DEFAULT_CONFIG.items():
             conn.execute(

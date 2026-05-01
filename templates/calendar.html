@@ -111,7 +111,6 @@ function loadCycle() {
             wireActiveCycle();
             loadEvents();
             loadFeeds();
-            loadPhotos();
             loadPlants();
             loadRecurring();
             loadCosts();
@@ -345,14 +344,6 @@ function renderActiveCycle(d) {
                     <div class="events-list" id="events-past"><div class="empty-state">Cargando...</div></div>
                 </div>
             </div>
-        </section>
-
-        <section class="section">
-            <div class="section-head">
-                <div class="section-title">Bitacora fotografica</div>
-                ${CAN_WRITE ? '<button class="btn-secondary" onclick="takeSnapshot()" style="font-size:0.75rem;padding:6px 12px;">Tomar foto ahora</button>' : ''}
-            </div>
-            <div class="photos-grid" id="photos-grid"><div class="empty-state">Cargando...</div></div>
         </section>
 
         ${CAN_WRITE ? `<section class="section">

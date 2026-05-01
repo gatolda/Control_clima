@@ -1,0 +1,18 @@
+# bin/fleet.yml.example - copialo a bin/fleet.yml y agregale tus Pis.
+# El archivo real esta en .gitignore (lleva IPs/hostnames de clientes).
+#
+# Cada entry necesita: name (alias), host (IP Tailscale o hostname.ts.net), user (SSH user).
+
+pis:
+  - name: kowen           # tu Pi de desarrollo
+    host: 100.90.99.32    # IP Tailscale (la podes ver en `tailscale status`)
+    user: kowen
+
+  # Ejemplos para clientes futuros:
+  # - name: cliente-juan
+  #   host: 100.x.y.z
+  #   user: kowen
+  #
+  # - name: cliente-maria
+  #   host: 100.a.b.c
+  #   user: kowen

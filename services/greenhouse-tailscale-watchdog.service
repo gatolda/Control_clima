@@ -1,0 +1,12 @@
+[Unit]
+Description=Greenhouse Tailscale + Funnel watchdog
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash /home/kowen/proyectos/Control_clima/bin/tailscale-watchdog.sh
+
+# Output va al log que el script ya rota via logrotate config aparte
+StandardOutput=null
+StandardError=append:/var/log/greenhouse-tailscale-watchdog.log

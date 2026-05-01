@@ -38,3 +38,6 @@ preview_server.py
 
 # Ignore sync script logs
 sync.log
+
+# Fleet inventory (IPs/hostnames de clientes - privado)
+bin/fleet.yml

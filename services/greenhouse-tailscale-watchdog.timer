@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Tailscale watchdog every 5 minutes (and 2 min after boot)
+
+[Timer]
+# Despues del boot, esperar 2 min antes de la primera corrida
+OnBootSec=2min
+# Despues, cada 5 min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

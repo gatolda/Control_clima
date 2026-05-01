@@ -139,35 +139,40 @@ cloud_agent = CloudAgent(
 latest_sensor_data = {}
 app_started_at = time.time()
 
-# Buffer rolling para filtrar spikes del MH-Z19D (sensor barato, da reads erraticos)
-_co2_buffer = []
-_CO2_BUFFER_SIZE = 5
-_CO2_MAX_REASONABLE = 2500  # ppm. Indoor grow no deberia pasar esto.
-_last_good_co2 = None
+# --- Filtros anti-spike de sensores ---
+# Sensores baratos (DHT22, MH-Z19D) tiran reads erroneos ocasionales.
+# Limites realistas para indoor grow + comparacion con valor previo bueno.
 
-def _filter_co2_spike(co2_raw):
+_SENSOR_LIMITS = {
+    "temp": {"min": 10.0, "max": 40.0,  "max_jump_pct": 0.3},  # 30% jump max
+    "hum":  {"min": 25.0, "max": 95.0,  "max_jump_pct": 0.5},
+    "co2":  {"min": 200,  "max": 2500,  "max_jump_pct": 1.0},  # 2x ratio
+}
+_last_good = {"temp": None, "hum": None, "co2": None}
+
+def _filter_spike(key, raw):
     """
-    Rechaza lecturas con jump >50% del valor anterior bueno, o sobre 2500 ppm.
-    Devuelve (valor_filtrado, is_spike). is_spike=True si lo descartamos.
+    Filtro generico de spikes. Devuelve (valor_filtrado, is_spike).
+    Si el valor es spike, devuelve el ultimo valor bueno (no None) para
+    no introducir nulls innecesarios en la DB.
     """
-    global _last_good_co2, _co2_buffer
-    if co2_raw is None:
+    if raw is None:
         return None, False
-    # Hard limit: por encima de 2500 es claramente erroneo en un cultivo normal
-    if co2_raw > _CO2_MAX_REASONABLE:
-        return _last_good_co2, True
-    # Si tenemos un valor previo bueno, comparar
-    if _last_good_co2 is not None:
-        ratio = co2_raw / _last_good_co2 if _last_good_co2 > 0 else 1
-        # Salto >2x o <0.4x del previo es spike
-        if ratio > 2 or ratio < 0.4:
-            return _last_good_co2, True
+    limits = _SENSOR_LIMITS.get(key)
+    if not limits:
+        return raw, False
+    # Hard limits: fuera del rango fisico esperado
+    if raw < limits["min"] or raw > limits["max"]:
+        return _last_good[key], True
+    # Jump excesivo respecto al ultimo bueno
+    last = _last_good[key]
+    if last is not None and last > 0:
+        diff_pct = abs(raw - last) / last
+        if diff_pct > limits["max_jump_pct"]:
+            return last, True
     # Aceptar
-    _last_good_co2 = co2_raw
-    _co2_buffer.append(co2_raw)
-    if len(_co2_buffer) > _CO2_BUFFER_SIZE:
-        _co2_buffer.pop(0)
-    return co2_raw, False
+    _last_good[key] = raw
+    return raw, False
 sensor_lock = threading.Lock()
 
 # --- Login ---
@@ -1238,14 +1243,18 @@ def sensor_background_thread():
             hum = datos.get("temperatura_humedad", {}).get("humidity")
             co2 = datos.get("co2", {}).get("co2")
 
-            # Filtrar lecturas erraticas del DHT22
-            if temp is not None and (temp <= 0 or temp > 80):
-                temp = None
-            if hum is not None and (hum <= 0 or hum > 100):
-                hum = None
-            # CO2: usar filtro de spike sofisticado (sensor MH-Z19D tira reads malos)
+            # Filtros anti-spike: rechazan lecturas fuera de rango fisico o
+            # con jumps excesivos respecto al ultimo valor bueno.
+            if temp is not None:
+                temp, was_spike = _filter_spike("temp", temp)
+                if was_spike:
+                    print(f"[temp] spike rechazado, manteniendo {temp}", flush=True)
+            if hum is not None:
+                hum, was_spike = _filter_spike("hum", hum)
+                if was_spike:
+                    print(f"[hum] spike rechazado, manteniendo {hum}", flush=True)
             if co2 is not None:
-                co2, was_spike = _filter_co2_spike(co2)
+                co2, was_spike = _filter_spike("co2", co2)
                 if was_spike:
                     print(f"[co2] spike rechazado, manteniendo {co2}", flush=True)
 

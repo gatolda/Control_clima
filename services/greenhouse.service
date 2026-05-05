@@ -1,0 +1,21 @@
+[Unit]
+Description=Greenhouse Climate Control (Flask + Socket.IO)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kowen
+Group=kowen
+SupplementaryGroups=gpio i2c spi dialout
+WorkingDirectory=/home/kowen/proyectos/Control_clima
+EnvironmentFile=/home/kowen/proyectos/Control_clima/.env
+ExecStart=/home/kowen/proyectos/Control_clima/.venv/bin/python /home/kowen/proyectos/Control_clima/app.py
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=append:/var/log/greenhouse.log
+StandardError=append:/var/log/greenhouse.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+# logrotate config for greenhouse logs.
+# Install to: /etc/logrotate.d/greenhouse
+# Runs daily via the system logrotate.timer.
+
+/var/log/greenhouse.log /var/log/greenhouse-watchdog.log /var/log/greenhouse-tailscale-watchdog.log /var/log/greenhouse-backup.log /var/log/greenhouse-deploy.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 0644 kowen kowen
+}

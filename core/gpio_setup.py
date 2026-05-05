@@ -1,7 +1,7 @@
 # gpio_setup.py
 import RPi.GPIO as GPIO
 
-def inicializar_gpio(modo="BOARD"):
+def inicializar_gpio(modo="BCM"):
     """
     Configura el modo de numeración de pines.
     modo: "BOARD" o "BCM"

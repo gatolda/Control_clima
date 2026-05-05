@@ -1,6 +1,28 @@
 import statistics
 import time
 import Adafruit_DHT
+
+# Monkey-patch: Adafruit_DHT.platform_detect.pi_version() devuelve None en kernels
+# nuevos (>=6.x) porque /proc/cpuinfo ya no incluye la linea "Hardware: BCM2835".
+# Forzamos deteccion de Pi leyendo /proc/device-tree/model.
+import Adafruit_DHT.platform_detect as _pd
+if _pd.pi_version() is None:
+    try:
+        with open("/proc/device-tree/model", "r") as _f:
+            _model = _f.read()
+        if "Raspberry Pi 4" in _model:
+            _pd.pi_version = lambda: 3  # mismo handler que Pi 3 (BCM2835 family)
+        elif "Raspberry Pi 3" in _model:
+            _pd.pi_version = lambda: 3
+        elif "Raspberry Pi 2" in _model:
+            _pd.pi_version = lambda: 2
+        elif "Raspberry Pi" in _model:
+            _pd.pi_version = lambda: 1
+        if _pd.pi_version() is not None:
+            _pd.platform_detect = lambda: 1  # 1 = RASPBERRY_PI
+    except Exception:
+        pass
+
 from core.Sensores.co2_pwm_sensor import CO2PWMSensor
 from core.Sensores.arduino_serial import ArduinoSerialHub
 

@@ -1,13 +1,14 @@
 import statistics
 import time
-import board
-import adafruit_dht
 from core.Sensores.co2_pwm_sensor import CO2PWMSensor
 from core.Sensores.arduino_serial import ArduinoSerialHub
 
-
+# adafruit_dht/board se importan LAZY adentro de _get_driver porque
+# `import board` (blinka) llama RPi.GPIO.setmode(BCM) al importarse, y
+# eso entra en conflicto con inicializar_gpio() que setea BOARD.
+# Migrar todo el proyecto a BCM mode esta en el backlog (config.yml + gpio_setup).
 def _board_pin(bcm_pin):
-    """Mapea numero de pin BCM a board.DXX (lo que adafruit_dht necesita)."""
+    import board
     return getattr(board, f"D{bcm_pin}")
 
 
@@ -56,9 +57,14 @@ class SensorReader:
         pin = sensor_config.get("pin")
 
         if tipo == "DHT22":
-            # adafruit_dht: instancia por pin. use_pulseio=False evita libgpiod
-            # (mas estable en Pi sin permisos extra).
-            self._drivers[sensor_id] = adafruit_dht.DHT22(_board_pin(pin), use_pulseio=False)
+            # Lazy import (ver nota arriba). Puede fallar con ValueError si
+            # RPi.GPIO ya esta en modo BOARD; lo capturamos y devolvemos None.
+            try:
+                import adafruit_dht
+                self._drivers[sensor_id] = adafruit_dht.DHT22(_board_pin(pin), use_pulseio=False)
+            except (ValueError, ImportError, RuntimeError) as e:
+                self._sensor_status[sensor_id] = f"init_error: {e}"
+                self._drivers[sensor_id] = None
         elif tipo == "CO2_PWM":
             self._drivers[sensor_id] = CO2PWMSensor(pin)
         elif tipo == "ARDUINO_SERIAL":
@@ -75,6 +81,8 @@ class SensorReader:
         try:
             if tipo == "DHT22":
                 driver = self._get_driver(sensor_config)
+                if driver is None:
+                    return None  # init fallo (ver _get_driver), status ya anotado
                 # adafruit_dht es flaky por naturaleza (timing-sensitive),
                 # reintentamos hasta 3 veces.
                 temperature = humidity = None

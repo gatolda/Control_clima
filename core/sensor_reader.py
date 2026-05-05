@@ -1,30 +1,14 @@
 import statistics
 import time
-import Adafruit_DHT
-
-# Monkey-patch: Adafruit_DHT.platform_detect.pi_version() devuelve None en kernels
-# nuevos (>=6.x) porque /proc/cpuinfo ya no incluye la linea "Hardware: BCM2835".
-# Forzamos deteccion de Pi leyendo /proc/device-tree/model.
-import Adafruit_DHT.platform_detect as _pd
-if _pd.pi_version() is None:
-    try:
-        with open("/proc/device-tree/model", "r") as _f:
-            _model = _f.read()
-        if "Raspberry Pi 4" in _model:
-            _pd.pi_version = lambda: 3  # mismo handler que Pi 3 (BCM2835 family)
-        elif "Raspberry Pi 3" in _model:
-            _pd.pi_version = lambda: 3
-        elif "Raspberry Pi 2" in _model:
-            _pd.pi_version = lambda: 2
-        elif "Raspberry Pi" in _model:
-            _pd.pi_version = lambda: 1
-        if _pd.pi_version() is not None:
-            _pd.platform_detect = lambda: 1  # 1 = RASPBERRY_PI
-    except Exception:
-        pass
-
+import board
+import adafruit_dht
 from core.Sensores.co2_pwm_sensor import CO2PWMSensor
 from core.Sensores.arduino_serial import ArduinoSerialHub
+
+
+def _board_pin(bcm_pin):
+    """Mapea numero de pin BCM a board.DXX (lo que adafruit_dht necesita)."""
+    return getattr(board, f"D{bcm_pin}")
 
 
 class SensorReader:
@@ -72,8 +56,9 @@ class SensorReader:
         pin = sensor_config.get("pin")
 
         if tipo == "DHT22":
-            # Adafruit_DHT no necesita instancia, usamos el modulo directo
-            self._drivers[sensor_id] = {"tipo": "DHT22", "pin": pin}
+            # adafruit_dht: instancia por pin. use_pulseio=False evita libgpiod
+            # (mas estable en Pi sin permisos extra).
+            self._drivers[sensor_id] = adafruit_dht.DHT22(_board_pin(pin), use_pulseio=False)
         elif tipo == "CO2_PWM":
             self._drivers[sensor_id] = CO2PWMSensor(pin)
         elif tipo == "ARDUINO_SERIAL":
@@ -89,11 +74,19 @@ class SensorReader:
 
         try:
             if tipo == "DHT22":
-                pin = sensor_config["pin"]
-                humidity, temperature = Adafruit_DHT.read_retry(
-                    Adafruit_DHT.DHT22, pin, retries=3, delay_seconds=0.5
-                )
-                self._sensor_status[sensor_id] = "ok"
+                driver = self._get_driver(sensor_config)
+                # adafruit_dht es flaky por naturaleza (timing-sensitive),
+                # reintentamos hasta 3 veces.
+                temperature = humidity = None
+                for _ in range(3):
+                    try:
+                        temperature = driver.temperature
+                        humidity = driver.humidity
+                        if temperature is not None and humidity is not None:
+                            break
+                    except RuntimeError:
+                        time.sleep(0.5)
+                self._sensor_status[sensor_id] = "ok" if temperature is not None else "sin_datos"
                 if variable == "temperatura":
                     return temperature
                 elif variable == "humedad":

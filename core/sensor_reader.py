@@ -83,17 +83,18 @@ class SensorReader:
                 driver = self._get_driver(sensor_config)
                 if driver is None:
                     return None  # init fallo (ver _get_driver), status ya anotado
-                # adafruit_dht es flaky por naturaleza (timing-sensitive),
-                # reintentamos hasta 3 veces.
+                # adafruit_dht es muy flaky (timing-sensitive). Hasta 5 retries
+                # con 2s entre cada uno (el DHT22 necesita >=2s entre lecturas).
                 temperature = humidity = None
-                for _ in range(3):
+                for _ in range(5):
                     try:
                         temperature = driver.temperature
                         humidity = driver.humidity
                         if temperature is not None and humidity is not None:
                             break
                     except RuntimeError:
-                        time.sleep(0.5)
+                        pass
+                    time.sleep(2.0)
                 self._sensor_status[sensor_id] = "ok" if temperature is not None else "sin_datos"
                 if variable == "temperatura":
                     return temperature

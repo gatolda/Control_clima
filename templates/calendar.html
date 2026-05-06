@@ -114,6 +114,7 @@ function loadCycle() {
             loadPlants();
             loadRecurring();
             loadCosts();
+            loadLightSchedule();
             // Pre-llenar campos de cosecha si existen
             if (data.cycle.harvest_wet_g != null) document.getElementById('harv-wet').value = data.cycle.harvest_wet_g;
             if (data.cycle.harvest_dry_g != null) document.getElementById('harv-dry').value = data.cycle.harvest_dry_g;
@@ -267,6 +268,29 @@ function renderActiveCycle(d) {
                     </div>
                 </div>
                 <div class="cycle-hero-actions">${actionHtml}</div>
+            </div>
+        </section>
+
+        <section class="section" id="light-section">
+            <div class="section-head">
+                <div class="section-title">Fotoperiodo del dia</div>
+            </div>
+            <div class="light-card" id="light-card">
+                <div class="light-card-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                </div>
+                <div class="light-card-info">
+                    <div class="light-card-times">
+                        <span id="cal-light-on">--:00</span>
+                        <span class="light-card-arrow">→</span>
+                        <span id="cal-light-off">--:00</span>
+                    </div>
+                    <div class="light-card-meta">
+                        <span id="cal-light-hours">--</span> horas de luz · <span id="cal-light-dark">--</span> horas oscuridad
+                    </div>
+                    <div class="light-card-now" id="cal-light-now">--</div>
+                </div>
+                <a href="/" class="light-card-edit" title="Cambiar horario en dashboard">Cambiar →</a>
             </div>
         </section>
 
@@ -746,6 +770,48 @@ function addCost() {
 function deleteCost(id) {
     if (!confirm('Eliminar este costo?')) return;
     fetch('/api/cycle/costs/' + id, {method:'DELETE'}).then(r=>r.json()).then(res => { if (res.ok) loadCosts(); });
+}
+
+// ============= Light schedule =============
+function loadLightSchedule() {
+    fetch('/api/climate/status')
+        .then(r => r.json())
+        .then(data => {
+            const th = data.thresholds || {};
+            const lightOn = data.light_on_hour ?? 6;
+            const lightHours = data.light_hours ?? th.light_hours ?? 0;
+            const darkHours = th.dark_hours ?? (lightHours ? 24 - lightHours : 0);
+            const lightOff = lightHours ? (lightOn + lightHours) % 24 : null;
+            const onStr = String(lightOn).padStart(2, '0') + ':00';
+            const offStr = lightOff != null ? String(lightOff).padStart(2, '0') + ':00' : '--:00';
+            document.getElementById('cal-light-on').textContent = onStr;
+            document.getElementById('cal-light-off').textContent = offStr;
+            document.getElementById('cal-light-hours').textContent = lightHours || '--';
+            document.getElementById('cal-light-dark').textContent = darkHours || '--';
+            // Estado actual: encendido o apagado
+            const now = new Date().getHours();
+            const isOn = lightOff != null && (
+                lightOn < lightOff ? (now >= lightOn && now < lightOff)
+                                   : (now >= lightOn || now < lightOff)
+            );
+            const card = document.getElementById('light-card');
+            const nowEl = document.getElementById('cal-light-now');
+            if (isOn) {
+                const hoursLeft = lightOff > now ? lightOff - now : (24 - now + lightOff);
+                nowEl.textContent = '● Encendidas ahora · apagan en ' + hoursLeft + 'h';
+                card.classList.add('light-card-on');
+                card.classList.remove('light-card-off');
+            } else {
+                const hoursLeft = lightOn > now ? lightOn - now : (24 - now + lightOn);
+                nowEl.textContent = '○ Apagadas · encienden en ' + hoursLeft + 'h';
+                card.classList.add('light-card-off');
+                card.classList.remove('light-card-on');
+            }
+        })
+        .catch(() => {
+            const sec = document.getElementById('light-section');
+            if (sec) sec.style.display = 'none';
+        });
 }
 
 // ============= Harvest =============

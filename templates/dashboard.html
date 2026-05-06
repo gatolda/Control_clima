@@ -411,7 +411,19 @@
                     </div>
                     <div class="stat">
                         <span class="stat-label">Fotoperiodo</span>
-                        <span class="stat-value mono" id="light-schedule">--h / --h</span>
+                        <div class="light-row">
+                            {% if user.is_authenticated and user.can_write %}
+                            <input type="number" id="input-light-on" min="0" max="23"
+                                   class="light-input" onchange="setLightOn(this.value)"
+                                   title="Hora encendido (0-23)">
+                            {% else %}
+                            <span id="input-light-on" class="light-input" style="border:none">--</span>
+                            {% endif %}
+                            <span class="light-suffix">:00</span>
+                            <span class="light-arrow">→</span>
+                            <span id="light-off-display" class="light-time">--:00</span>
+                        </div>
+                        <span class="stat-sub mono" id="light-schedule">-- h luz · -- h oscuridad</span>
                     </div>
                 </div>
 
@@ -1161,7 +1173,18 @@ function updateClimatePanel(data) {
     document.getElementById('stage-desc').textContent = data.stage_info || '';
 
     const th = data.thresholds || {};
-    document.getElementById('light-schedule').textContent = (th.light_hours || '--') + 'h / ' + (th.dark_hours || '--') + 'h';
+    const lightOn = data.light_on_hour ?? 6;
+    const lightHours = data.light_hours ?? th.light_hours ?? 0;
+    const lightOff = lightHours ? (lightOn + lightHours) % 24 : null;
+    const inputEl = document.getElementById('input-light-on');
+    if (inputEl && document.activeElement !== inputEl) {
+        if (inputEl.tagName === 'INPUT') inputEl.value = lightOn;
+        else inputEl.textContent = String(lightOn).padStart(2, '0');
+    }
+    document.getElementById('light-off-display').textContent =
+        (lightOff != null ? String(lightOff).padStart(2, '0') : '--') + ':00';
+    document.getElementById('light-schedule').textContent =
+        (th.light_hours || '--') + ' h luz · ' + (th.dark_hours || '--') + ' h oscuridad';
     document.getElementById('th-temp').textContent = (th.temp_min || '--') + '-' + (th.temp_max || '--') + '°C';
     document.getElementById('th-temp-night').textContent = (th.temp_night_min || '--') + '-' + (th.temp_night_max || '--') + '°C';
     document.getElementById('th-hum').textContent = (th.hum_min || '--') + '-' + (th.hum_max || '--') + '%';
@@ -1194,6 +1217,30 @@ function renderStages(stages, currentStage) {
         const label = s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         return '<button class="stage-pill' + active + '" onclick="setStage(\'' + s + '\')">' + label + '</button>';
     }).join('');
+}
+
+function setLightOn(value) {
+    const v = parseInt(value);
+    if (isNaN(v) || v < 0 || v > 23) {
+        showToast('Hora invalida (0-23)', 'error');
+        return;
+    }
+    fetch('/api/climate/light', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({light_on_hour: v}),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast('Luces encienden a las ' + String(v).padStart(2, '0') + ':00', 'success');
+            // Refrescar climate panel para que aparezca la nueva hora_off calculada
+            fetch('/api/climate/status').then(r => r.json()).then(updateClimatePanel);
+        } else {
+            showToast(res.error || 'Error', 'error');
+        }
+    })
+    .catch(() => showToast('Error de red', 'error'));
 }
 
 function toggleClimateMode() {

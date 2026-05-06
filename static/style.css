@@ -2817,6 +2817,171 @@ table.data code {
 }
 
 /* ============================================================
+   LIGHT SCHEDULE — dashboard stat (editable) + calendar card
+   ============================================================ */
+.light-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    font-variation-settings: "opsz" 72, "SOFT" 30;
+    letter-spacing: -0.025em;
+    line-height: 1;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.light-input {
+    width: 2.4ch;
+    padding: 1px 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xs);
+    color: var(--text-primary);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    -moz-appearance: textfield;
+    transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.light-input::-webkit-outer-spin-button,
+.light-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.light-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-surface-2);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.light-input:hover:not(:focus) {
+    border-color: var(--border-strong);
+}
+.light-suffix,
+.light-time {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.light-arrow {
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-style: italic;
+    padding: 0 2px;
+}
+[data-role="viewer"] .light-input {
+    pointer-events: none;
+    border-color: transparent;
+    background: transparent;
+}
+
+/* Calendar light card */
+.light-card {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 18px;
+    align-items: center;
+    padding: 18px 22px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    transition: border-color 0.25s var(--ease), background 0.4s var(--ease);
+    position: relative;
+    overflow: hidden;
+}
+.light-card-on {
+    background:
+        radial-gradient(circle at 0% 0%, var(--accent-dim) 0%, transparent 55%),
+        var(--bg-surface);
+    border-color: rgba(200, 255, 107, 0.32);
+}
+.light-card-off {
+    background: var(--bg-surface);
+    opacity: 0.92;
+}
+.light-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--r-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-surface-2);
+    color: var(--text-muted);
+    transition: background 0.4s var(--ease), color 0.4s var(--ease);
+}
+.light-card-on .light-card-icon {
+    background: var(--accent-dim);
+    color: var(--accent);
+    box-shadow: 0 0 18px var(--accent-dim);
+    animation: light-pulse 3s ease-in-out infinite;
+}
+@keyframes light-pulse {
+    0%, 100% { box-shadow: 0 0 18px var(--accent-dim); }
+    50%      { box-shadow: 0 0 28px var(--accent-dim); }
+}
+.light-card-info { min-width: 0; }
+.light-card-times {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-family: var(--font-display);
+    font-size: 1.85rem;
+    font-weight: 400;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.light-card-arrow {
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 1.3rem;
+}
+.light-card-meta {
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+}
+.light-card-now {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+.light-card-on .light-card-now { color: var(--accent); }
+.light-card-edit {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    transition: all 0.15s var(--ease);
+}
+.light-card-edit:hover {
+    color: var(--accent);
+    border-color: var(--border-strong);
+    background: var(--accent-soft);
+}
+@media (max-width: 700px) {
+    .light-card { grid-template-columns: auto 1fr; }
+    .light-card-edit { grid-column: 1 / -1; text-align: center; }
+    .light-card-times { font-size: 1.5rem; }
+}
+
+/* ============================================================
    PRINT
    ============================================================ */
 @media print {

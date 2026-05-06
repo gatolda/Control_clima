@@ -46,6 +46,15 @@ class ClimateController:
         self._last_decisions = {}  # cache de ultimas decisiones para logging
         self._light_state = None  # tracking de estado de luz
 
+        # Sensor failsafe: si una variable critica (temp/hum) no tiene lectura
+        # valida por mas de N segundos, entramos en modo failsafe (apagar
+        # actuadores activos = riesgo, dejar ventilacion). Plantas vivas no
+        # toleran calefactor/AC/humidificador actuando a ciegas.
+        self._failsafe_timeout_sec = histeresis.get("sensor_failsafe_seconds", 300)  # 5 min default
+        self._last_valid = {"temperature": 0, "humidity": 0, "co2": 0}  # epoch timestamps
+        self._failsafe_active = False
+        self._failsafe_reason = ""
+
         # Scheduler de luz: corre SIEMPRE (independiente del modo). El fotoperiodo
         # es safety-critical (la planta no debe recibir luz fuera de horario).
         self._light_scheduler_running = False
@@ -143,6 +152,11 @@ class ClimateController:
         """Estado completo del controlador para el dashboard."""
         stage, thresholds = self.get_current_stage()
         mode = self.db.get_config("mode", "manual")
+        now = time.time()
+        sensor_age = {
+            var: (None if ts == 0 else int(now - ts))
+            for var, ts in self._last_valid.items()
+        }
         return {
             "mode": mode,
             "running": self._running,
@@ -154,6 +168,10 @@ class ClimateController:
             "last_decisions": self._last_decisions,
             "light_on_hour": int(self.db.get_config("light_on_hour", "6")),
             "light_hours": thresholds.get("light_hours", 18),
+            "failsafe_active": self._failsafe_active,
+            "failsafe_reason": self._failsafe_reason,
+            "failsafe_timeout_sec": self._failsafe_timeout_sec,
+            "sensor_age_seconds": sensor_age,
         }
 
     # === LOOP PRINCIPAL ===
@@ -173,12 +191,25 @@ class ClimateController:
                 stage, thresholds = self.get_current_stage()
                 readings = self._read_all_sensors()
 
-                if readings["temperature"] is not None:
+                # Tracking de lecturas validas para failsafe
+                now = time.time()
+                for var in ("temperature", "humidity", "co2"):
+                    if readings[var] is not None:
+                        self._last_valid[var] = now
+
+                # Decidir si entrar / salir de failsafe (basado en temp+hum, criticos)
+                self._update_failsafe_state(now)
+
+                if self._failsafe_active:
+                    # Bajo failsafe: apagar climatizacion activa peligrosa,
+                    # dejar ventilacion ON (mueve aire = siempre seguro).
+                    self._enter_failsafe_actions()
+                elif readings["temperature"] is not None:
                     decisions = self._evaluate(readings, thresholds)
                     self._execute(decisions)
                     self._last_decisions = decisions
 
-                # Control de fotoperiodo
+                # Control de fotoperiodo (independiente de failsafe — corre siempre)
                 self._control_light(thresholds)
 
                 # Filtro de carbon: obligatorio desde pre-floracion hasta secado
@@ -189,6 +220,48 @@ class ClimateController:
 
             time.sleep(self._eval_interval)
 
+    def _update_failsafe_state(self, now):
+        """Activa o desactiva failsafe segun edad de las lecturas criticas."""
+        critical_vars = ("temperature", "humidity")
+        stale = []
+        for var in critical_vars:
+            last = self._last_valid.get(var, 0)
+            if last == 0 or (now - last) > self._failsafe_timeout_sec:
+                age = "nunca" if last == 0 else f"{int(now - last)}s"
+                stale.append(f"{var}({age})")
+
+        was_active = self._failsafe_active
+        if stale:
+            self._failsafe_active = True
+            self._failsafe_reason = "Sensor stale: " + ", ".join(stale)
+            if not was_active:
+                print(f"FAILSAFE ACTIVO: {self._failsafe_reason}")
+        else:
+            if was_active:
+                print(f"FAILSAFE DESACTIVADO: lecturas recuperadas")
+            self._failsafe_active = False
+            self._failsafe_reason = ""
+
+    def _enter_failsafe_actions(self):
+        """Acciones bajo failsafe: apagar climatizacion peligrosa, dejar ventilacion."""
+        estados = self.actuators.status()
+        # Apagar lo que pueda dañar plantas a ciegas
+        for name in ("calefactor", "aire_acondicionado", "humidificador", "deshumidificador"):
+            try:
+                if name in estados and estados[name]:
+                    self.actuators.turn_off(name)
+                    self.db.log_actuator_event(name, "off", triggered_by="failsafe")
+            except Exception as e:
+                print(f"Failsafe: no pude apagar {name}: {e}")
+        # Encender ventilacion (mueve aire, no daña)
+        try:
+            if "ventiladores" in estados and not estados["ventiladores"]:
+                res = self.actuators.turn_on("ventiladores")
+                if res.get("ok"):
+                    self.db.log_actuator_event("ventiladores", "on", triggered_by="failsafe")
+        except Exception as e:
+            print(f"Failsafe: no pude encender ventiladores: {e}")
+
     def _read_all_sensors(self):
         """Lee todos los sensores y retorna valores consolidados."""
         data = self.sensor_reader.read_all()
@@ -196,12 +269,13 @@ class ClimateController:
         hum = data.get("temperatura_humedad", {}).get("humidity")
         co2 = data.get("co2", {}).get("co2")
 
-        # Filtrar lecturas erraticas
-        if temp is not None and (temp <= 0 or temp > 80):
+        # Rangos amplios — sensor_reader ya filtra spikes y rangos basicos.
+        # Estos limites cubren todo el ciclo (germinacion permite 5°C).
+        if temp is not None and (temp < -40 or temp > 80):
             temp = None
-        if hum is not None and (hum <= 0 or hum > 100):
+        if hum is not None and (hum < 0 or hum > 100):
             hum = None
-        if co2 is not None and (co2 <= 0 or co2 > 5000):
+        if co2 is not None and (co2 < 0 or co2 > 5000):
             co2 = None
 
         vpd = self._calculate_vpd(temp, hum)

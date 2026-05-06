@@ -2,7 +2,7 @@
 // Estrategia: network-first para CSS/JS (para que cambios de estilo se reflejen
 // inmediatamente), cache solo como fallback offline.
 
-const CACHE_NAME = 'greenhouse-v5';
+const CACHE_NAME = 'greenhouse-v6';
 const APP_SHELL = [
     '/static/style.css',
     '/static/manifest.webmanifest',

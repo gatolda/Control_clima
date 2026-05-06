@@ -2982,6 +2982,53 @@ table.data code {
 }
 
 /* ============================================================
+   FAILSAFE BANNER (climate controller en modo seguro)
+   ============================================================ */
+.failsafe-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    background:
+        linear-gradient(90deg, var(--amber-dim), transparent 80%),
+        var(--bg-surface);
+    border: 1px solid rgba(255, 179, 71, 0.4);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--r-md);
+    color: var(--text-primary);
+    box-shadow: 0 0 24px rgba(255, 179, 71, 0.12);
+    animation: failsafe-pulse 3s ease-in-out infinite;
+}
+.failsafe-banner svg {
+    color: var(--amber);
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 6px rgba(255, 179, 71, 0.5));
+}
+.failsafe-banner-content { flex: 1; min-width: 0; }
+.failsafe-banner-title {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-style: italic;
+    font-variation-settings: "opsz" 36, "SOFT" 50;
+    color: var(--amber);
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    margin-bottom: 3px;
+}
+.failsafe-banner-msg {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.01em;
+    line-height: 1.4;
+}
+@keyframes failsafe-pulse {
+    0%, 100% { box-shadow: 0 0 24px rgba(255, 179, 71, 0.12); }
+    50%      { box-shadow: 0 0 40px rgba(255, 179, 71, 0.22); }
+}
+
+/* ============================================================
    PRINT
    ============================================================ */
 @media print {

@@ -119,6 +119,15 @@
             </div>
         </div>
 
+        <!-- ========== Failsafe banner (oculto por defecto, se muestra si activo) ========== -->
+        <div class="failsafe-banner" id="failsafe-banner" style="display:none">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="failsafe-banner-content">
+                <div class="failsafe-banner-title">Modo failsafe activo</div>
+                <div class="failsafe-banner-msg" id="failsafe-banner-msg">Sin lectura de sensor critico. Apagados calefactor/AC/humidificadores. Ventilacion encendida como medida de seguridad.</div>
+            </div>
+        </div>
+
         <!-- ========== Status bar ========== -->
         <div class="status-bar">
             <div class="status-bar-item">
@@ -1167,6 +1176,20 @@ function updateClimatePanel(data) {
     const isAuto = data.mode === 'auto';
     modeBtn.textContent = isAuto ? 'AUTO' : 'MANUAL';
     modeBtn.className = 'mode-chip ' + (isAuto ? 'auto' : '');
+
+    // Failsafe banner
+    const fbanner = document.getElementById('failsafe-banner');
+    const fmsg = document.getElementById('failsafe-banner-msg');
+    if (fbanner) {
+        if (data.failsafe_active) {
+            fbanner.style.display = 'flex';
+            if (fmsg && data.failsafe_reason) {
+                fmsg.textContent = data.failsafe_reason + '. Apagados calefactor/AC/humidificadores; ventilacion encendida como medida de seguridad.';
+            }
+        } else {
+            fbanner.style.display = 'none';
+        }
+    }
 
     document.getElementById('stage-label').textContent =
         (data.stage || '---').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());

@@ -2982,6 +2982,67 @@ table.data code {
 }
 
 /* ============================================================
+   MODE SEGMENTS — slider de 3 modos (Manual / Auto / Auto IA)
+   ============================================================ */
+.mode-segments {
+    display: inline-flex;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 3px;
+    gap: 2px;
+    width: max-content;
+}
+.mode-segment {
+    padding: 6px 14px;
+    border-radius: 99px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    transition: color 0.18s var(--ease), background 0.25s var(--ease), box-shadow 0.25s var(--ease);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.mode-segment:not(.active):not(.locked):hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-hover);
+}
+.mode-segment.active {
+    color: var(--accent-ink);
+    background: var(--accent);
+    box-shadow: 0 0 14px var(--accent-dim);
+    animation: mode-pulse 2.4s ease-in-out infinite;
+}
+@keyframes mode-pulse {
+    0%, 100% { box-shadow: 0 0 14px var(--accent-dim); }
+    50%      { box-shadow: 0 0 22px var(--accent-dim); }
+}
+.mode-segment.locked {
+    color: var(--text-dim);
+    cursor: not-allowed;
+    position: relative;
+}
+.mode-segment.locked:hover {
+    color: var(--text-secondary);
+}
+.mode-segment-lock {
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+[data-role="viewer"] .mode-segments {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+/* ============================================================
    FAILSAFE BANNER (climate controller en modo seguro)
    ============================================================ */
 .failsafe-banner {

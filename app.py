@@ -565,6 +565,89 @@ def climate_set_light():
         db.set_config("light_on_hour", str(int(light_on_hour)))
     return jsonify({"ok": True})
 
+# ─────────────────────────────────────────────────────────────
+# Arduino sensor calibration (sketch v2)
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/arduino/sensors", methods=["GET"])
+@login_required
+def api_arduino_sensors():
+    """Lecturas frescas del Arduino + status del hub.
+    Útil para la UI de calibración (ver raw values en vivo)."""
+    hub = getattr(sensor_reader, "_arduino_hub", None)
+    if not hub:
+        return jsonify({"connected": False, "readings": [], "calibrations": {}})
+    readings = []
+    for (sid, stype), r in hub.get_all_readings().items():
+        readings.append({
+            "id": sid,
+            "type": stype,
+            "value": r.get("value"),
+            "zone": r.get("zone"),
+            "raw": r.get("raw"),
+            "dry": r.get("dry"),
+            "field": r.get("field"),
+            "calibrated": r.get("calibrated"),
+            "age_seconds": int(time.time() - r.get("timestamp", 0)),
+        })
+    return jsonify({
+        "connected": hub.is_connected(),
+        "status": hub.get_status(),
+        "readings": readings,
+        "calibrations": hub.get_calibrations(),
+        "recent_events": hub.get_recent_calibration_events(limit=10),
+    })
+
+
+@app.route("/api/arduino/calibrate", methods=["POST"])
+@role_required("admin", "operator")
+def api_arduino_calibrate():
+    """Dispara calibración de un punto (DRY o FIELD) para un sensor de suelo.
+
+    Body JSON: {"sensor_id": "soil_s1", "point": "dry" | "field"}
+
+    El Arduino lee el raw actual, lo guarda en EEPROM y lo persiste.
+    """
+    data = request.get_json() or {}
+    sid = data.get("sensor_id")
+    point = (data.get("point") or "").lower()
+    if not sid or point not in ("dry", "field"):
+        return jsonify({"ok": False, "error": "sensor_id y point requeridos (point=dry|field)"}), 400
+
+    hub = getattr(sensor_reader, "_arduino_hub", None)
+    if not hub or not hub.is_connected():
+        return jsonify({"ok": False, "error": "Arduino hub no conectado"}), 503
+
+    if point == "dry":
+        sent = hub.calibrate_soil_dry(sid)
+    else:
+        sent = hub.calibrate_soil_field(sid)
+
+    if not sent:
+        return jsonify({"ok": False, "error": "no se pudo enviar comando al Arduino"}), 503
+
+    # Damos al Arduino unos segundos para procesar y reportar
+    return jsonify({"ok": True, "sensor_id": sid, "point": point, "note": "Calibración solicitada — verifica recent_events en /api/arduino/sensors en 2s"})
+
+
+@app.route("/api/arduino/refresh-calibrations", methods=["POST"])
+@role_required("admin", "operator")
+def api_arduino_refresh_calibrations():
+    """Pide al Arduino que reporte sus calibraciones actuales (cachea en hub)."""
+    hub = getattr(sensor_reader, "_arduino_hub", None)
+    if not hub or not hub.is_connected():
+        return jsonify({"ok": False, "error": "Arduino hub no conectado"}), 503
+    hub.request_calibrations()
+    return jsonify({"ok": True, "note": "Verifica /api/arduino/sensors en 2s"})
+
+
+@app.route("/calibrate", methods=["GET"])
+@role_required("admin", "operator")
+def calibrate_page():
+    """Página dedicada para calibrar sensores de suelo del Arduino."""
+    return render_template("calibrate.html")
+
+
 # --- Users API (admin) ---
 
 def _user_dto(u):

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark" data-density="normal"{% if user.is_authenticated %} data-role="{{ user.role }}"{% endif %}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calibración de sensores — ia grow</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icon.svg') }}">
+    <meta name="theme-color" content="#0C100E">
+    <script>
+        (function() {
+            const t = localStorage.getItem('theme');
+            const d = localStorage.getItem('density');
+            if (t) document.documentElement.setAttribute('data-theme', t);
+            if (d) document.documentElement.setAttribute('data-density', d);
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+            </div>
+            <div class="sidebar-brand-text">
+                <div class="sidebar-brand-title">Control Climatico</div>
+                <div class="sidebar-brand-subtitle">Invernadero</div>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-nav-section">Monitoreo</div>
+            <a href="/" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="/calendar" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>Calendario</span>
+            </a>
+            <a href="/diagnostics" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                <span>Diagnosticos</span>
+            </a>
+
+            <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/calibrate" class="nav-item active">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>Calibración</span>
+            </a>
+            <a href="/inventory" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                <span>Inventario</span>
+            </a>
+            <a href="/settings" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Ajustes</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            {% if user.is_authenticated %}
+            <span class="role-chip role-{{ user.role }}" title="{{ user.username }} ({{ user.role }})">{{ user.role }}</span>
+            {% endif %}
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Calibración de sensores</h1>
+                <div class="page-subtitle">Punto seco y capacidad de campo por sensor de suelo</div>
+            </div>
+            <div class="page-meta">
+                <span id="conn-status">verificando...</span>
+            </div>
+        </div>
+
+        <section class="section">
+            <div class="section-head">
+                <div class="section-title">Procedimiento de calibración</div>
+            </div>
+            <div class="card card-pad" style="line-height: 1.6;">
+                <p style="margin-bottom:14px;color:var(--text-secondary);">
+                    Este sistema usa <strong style="color:var(--text-primary)">capacidad de campo</strong> como referencia
+                    de 100%, no "sumergido en agua". Capacidad de campo = sustrato saturado pero drenado, el estado
+                    biológicamente óptimo. Calibrá cada sensor en 2 puntos:
+                </p>
+                <ol style="margin-left:20px;color:var(--text-secondary);">
+                    <li style="margin-bottom:10px;">
+                        <strong style="color:var(--text-primary)">Punto SECO:</strong> sensor en sustrato bone-dry (deshidratado completamente o en aire). Click "Set DRY".
+                    </li>
+                    <li style="margin-bottom:10px;">
+                        <strong style="color:var(--text-primary)">Punto CAPACIDAD DE CAMPO:</strong> riega abundante hasta runoff, espera 1h para drenar, luego click "Set FIELD".
+                    </li>
+                </ol>
+                <p style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.78rem;margin-top:14px;">
+                    Tip: insertá siempre a la misma profundidad (3-5cm). Marcá el sensor con cinta para asegurar consistencia entre calibraciones.
+                </p>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-head">
+                <div class="section-title">Sensores de suelo</div>
+                <button class="section-action" onclick="refreshAll()">↻ Refrescar</button>
+            </div>
+            <div id="soil-sensors" class="cal-grid">
+                <div class="empty-state">Cargando lecturas del Arduino...</div>
+            </div>
+        </section>
+
+        <section class="section" id="events-section" style="display:none">
+            <div class="section-head">
+                <div class="section-title">Eventos de calibración recientes</div>
+            </div>
+            <div id="cal-events" class="card card-pad"></div>
+        </section>
+    </main>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<style>
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+}
+.cal-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 18px 20px;
+    transition: border-color 0.2s var(--ease);
+}
+.cal-card.uncalibrated {
+    border-color: rgba(255, 179, 71, 0.32);
+    background:
+        linear-gradient(90deg, var(--amber-dim), transparent 80%),
+        var(--bg-surface);
+}
+.cal-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+}
+.cal-card-id {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-variation-settings: "opsz" 36, "SOFT" 50;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+}
+.cal-card-zone {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+.cal-readout {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.cal-pct {
+    font-family: var(--font-display);
+    font-size: 2.4rem;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    line-height: 0.9;
+}
+.cal-unit { font-family: var(--font-mono); color: var(--text-muted); font-size: 0.9rem; }
+.cal-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin: 14px 0;
+    padding: 10px 12px;
+    background: var(--bg-surface-2);
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+}
+.cal-stat-label { color: var(--text-muted); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; }
+.cal-stat-value { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.cal-buttons {
+    display: flex;
+    gap: 8px;
+}
+.cal-btn {
+    flex: 1;
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s var(--ease);
+}
+.cal-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+.cal-btn-uncal { color: var(--amber); border-color: rgba(255,179,71,0.4); }
+.cal-event {
+    display: grid;
+    grid-template-columns: 80px 1fr auto;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+}
+.cal-event:last-child { border-bottom: none; }
+.cal-event-time { color: var(--text-muted); }
+.cal-event-id { color: var(--text-primary); }
+.cal-event-point { color: var(--accent); font-weight: 500; }
+</style>
+
+<script>
+const CAN_WRITE = {{ 'true' if user.is_authenticated and user.can_write else 'false' }};
+
+function showToast(msg, type='success') {
+    const c = document.getElementById('toasts');
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 4500);
+}
+
+async function fetchSensors() {
+    try {
+        const r = await fetch('/api/arduino/sensors');
+        const data = await r.json();
+        renderSensors(data);
+    } catch (e) {
+        document.getElementById('conn-status').textContent = 'error';
+        document.getElementById('soil-sensors').innerHTML = '<div class="empty-state">Error: ' + e + '</div>';
+    }
+}
+
+function renderSensors(data) {
+    const status = document.getElementById('conn-status');
+    if (!data.connected) {
+        status.textContent = 'Arduino desconectado';
+        status.style.color = 'var(--red)';
+        document.getElementById('soil-sensors').innerHTML =
+            '<div class="empty-state">Arduino no conectado.<br><br>Verificá: USB enchufado, /dev/arduino-soil existe, greenhouse.service activo.</div>';
+        return;
+    }
+
+    status.textContent = 'Arduino conectado';
+    status.style.color = 'var(--accent)';
+
+    const soilReadings = (data.readings || []).filter(r => r.id && r.id.startsWith('soil_'));
+
+    if (!soilReadings.length) {
+        document.getElementById('soil-sensors').innerHTML =
+            '<div class="empty-state">No se ven sensores de suelo. Verifica que el sketch v2 esté flasheado en el Arduino.</div>';
+        return;
+    }
+
+    const html = soilReadings.map(r => {
+        const cls = r.calibrated ? '' : 'uncalibrated';
+        const btnCls = r.calibrated ? '' : 'cal-btn-uncal';
+        const pct = r.value != null ? r.value.toFixed(1) : '--';
+        const raw = r.raw != null ? r.raw : '--';
+        const dry = r.dry != null ? r.dry : '--';
+        const field = r.field != null ? r.field : '--';
+        return `
+            <div class="cal-card ${cls}">
+                <div class="cal-card-head">
+                    <span class="cal-card-id">${r.id}</span>
+                    <span class="cal-card-zone">${r.zone || ''}</span>
+                </div>
+                <div class="cal-readout">
+                    <span class="cal-pct">${pct}</span>
+                    <span class="cal-unit">% humedad útil</span>
+                </div>
+                <div class="cal-stats">
+                    <div><div class="cal-stat-label">Raw ADC</div><div class="cal-stat-value">${raw}</div></div>
+                    <div><div class="cal-stat-label">Seco</div><div class="cal-stat-value">${dry}</div></div>
+                    <div><div class="cal-stat-label">Campo</div><div class="cal-stat-value">${field}</div></div>
+                </div>
+                ${CAN_WRITE ? `
+                <div class="cal-buttons">
+                    <button class="cal-btn ${btnCls}" onclick="calibrate('${r.id}','dry')" ${r.calibrated ? '' : 'title="Sensor sin calibrar"'}>Set DRY</button>
+                    <button class="cal-btn ${btnCls}" onclick="calibrate('${r.id}','field')">Set FIELD</button>
+                </div>
+                ` : '<div style="color:var(--text-muted);font-size:0.74rem;text-align:center;">Calibración requiere rol operator/admin</div>'}
+            </div>
+        `;
+    }).join('');
+
+    document.getElementById('soil-sensors').innerHTML = html;
+
+    // Eventos recientes
+    const events = data.recent_events || [];
+    const evSec = document.getElementById('events-section');
+    if (events.length) {
+        evSec.style.display = 'block';
+        const evHtml = events.slice().reverse().map(e => {
+            const t = new Date(e.timestamp * 1000).toLocaleTimeString();
+            return `<div class="cal-event">
+                <span class="cal-event-time">${t}</span>
+                <span class="cal-event-id">${e.id}</span>
+                <span class="cal-event-point">${e.point.toUpperCase()}: raw=${e.raw}</span>
+            </div>`;
+        }).join('');
+        document.getElementById('cal-events').innerHTML = evHtml;
+    } else {
+        evSec.style.display = 'none';
+    }
+}
+
+async function calibrate(sensorId, point) {
+    const labels = {dry: 'punto SECO', field: 'CAPACIDAD DE CAMPO'};
+    if (!confirm(`Calibrar ${sensorId} como ${labels[point]}?\n\nEl Arduino va a guardar la lectura raw actual como referencia de ${point === 'dry' ? '0%' : '100%'}.`)) return;
+
+    try {
+        const r = await fetch('/api/arduino/calibrate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sensor_id: sensorId, point: point})
+        });
+        const data = await r.json();
+        if (data.ok) {
+            showToast(`✓ Calibración solicitada para ${sensorId} (${point}). Refrescando en 2s...`, 'success');
+            setTimeout(fetchSensors, 2500);
+        } else {
+            showToast(`✗ ${data.error || 'Error'}`, 'error');
+        }
+    } catch (e) {
+        showToast(`✗ Error de red: ${e}`, 'error');
+    }
+}
+
+async function refreshAll() {
+    await fetch('/api/arduino/refresh-calibrations', {method: 'POST'});
+    setTimeout(fetchSensors, 1500);
+}
+
+fetchSensors();
+setInterval(fetchSensors, 5000);
+</script>
+</body>
+</html>

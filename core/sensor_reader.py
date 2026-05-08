@@ -12,6 +12,17 @@ def _board_pin(bcm_pin):
     return getattr(board, f"D{bcm_pin}")
 
 
+# Mapping default de variable interna -> field del JSON del Arduino sketch v2.
+# Permite que sensores ARDUINO_SERIAL no tengan que especificar arduino_field
+# explicitamente cuando la variable es obvia. Se puede sobrescribir en config.
+_VARIABLE_TO_FIELD = {
+    "temperatura": "temperature",
+    "humedad": "humidity",
+    "co2": "co2",
+    "humedad_suelo": "humidity",
+}
+
+
 class SensorReader:
     """
     Lee multiples fuentes de sensores por variable y consolida
@@ -112,16 +123,20 @@ class SensorReader:
                     return None
 
             elif tipo == "ARDUINO_SERIAL":
-                if self._arduino_hub:
-                    value = self._arduino_hub.get_reading(sensor_id)
-                    if value is not None:
-                        self._sensor_status[sensor_id] = "ok"
-                        return value
-                    else:
-                        self._sensor_status[sensor_id] = "sin_datos"
-                        return None
-                else:
+                if not self._arduino_hub:
                     self._sensor_status[sensor_id] = "hub_no_disponible"
+                    return None
+                # Si la config tiene arduino_field, lo usamos (sensores
+                # multi-tipo como DHT22 que reportan temperature + humidity
+                # bajo el mismo id). Si no, mapeamos por la variable que
+                # estamos pidiendo.
+                field = sensor_config.get("arduino_field") or _VARIABLE_TO_FIELD.get(variable)
+                value = self._arduino_hub.get_reading(sensor_id, field=field)
+                if value is not None:
+                    self._sensor_status[sensor_id] = "ok"
+                    return value
+                else:
+                    self._sensor_status[sensor_id] = "sin_datos"
                     return None
 
         except Exception as e:

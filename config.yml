@@ -10,27 +10,36 @@ general:
 sensores:
   temperatura:
     - id: "dht22_1"
-      tipo: DHT22
-      pin: 4
-      ubicacion: "centro"
+      tipo: ARDUINO_SERIAL
+      arduino_field: "temperature"
+      ubicacion: "canopy"
+    - id: "dht22_2"
+      tipo: ARDUINO_SERIAL
+      arduino_field: "temperature"
+      ubicacion: "canopy"
 
   humedad:
     - id: "dht22_1"
-      tipo: DHT22
-      pin: 4
-      ubicacion: "centro"
+      tipo: ARDUINO_SERIAL
+      arduino_field: "humidity"
+      ubicacion: "canopy"
+    - id: "dht22_2"
+      tipo: ARDUINO_SERIAL
+      arduino_field: "humidity"
+      ubicacion: "canopy"
 
   co2:
-    - id: "mhz19d_1"
-      tipo: CO2_PWM
-      pin: 11
+    - id: "mhz19_1"
+      tipo: ARDUINO_SERIAL
+      arduino_field: "co2"
       ubicacion: "centro"
 
   humedad_suelo:
-    - id: "suelo_h_1"
+    - id: "soil_s1"
       tipo: ARDUINO_SERIAL
-      puerto: "/dev/arduino-soil"
+      arduino_field: "humidity"
       zona: "zona_1"
+
 
 # Arduino hub
 arduino:
@@ -43,14 +52,14 @@ actuadores:
   # Pines BOARD verificados (modulo 8 reles)
   # Rele 1=pin37, 2=pin35, 3=pin33, 4=pin31, 5=pin29, 6=pin32, 7=pin36, 8=pin38
   pines:
-    ventiladores: 37       # Rele 1
-    filtro_carbon: 35      # Rele 2
-    intractor: 33          # Rele 3
-    humidificador: 31      # Rele 4
-    deshumidificador: 29   # Rele 5
-    luz: 32                # Rele 6
-    calefactor: 36         # Rele 7
-    aire_acondicionado: 38 # Rele 8
+    ventiladores: 26       # Rele 1
+    filtro_carbon: 19      # Rele 2
+    intractor: 13          # Rele 3
+    humidificador: 6      # Rele 4
+    deshumidificador: 5   # Rele 5
+    luz: 12                # Rele 6
+    calefactor: 16         # Rele 7
+    aire_acondicionado: 20 # Rele 8
   tipo_activacion: "activo_bajo"
 
   # Pares que NUNCA deben estar activos al mismo tiempo

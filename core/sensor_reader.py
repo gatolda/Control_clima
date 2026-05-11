@@ -1,5 +1,6 @@
 import statistics
 import time
+from collections import deque
 from core.Sensores.co2_pwm_sensor import CO2PWMSensor
 from core.Sensores.arduino_serial import ArduinoSerialHub
 
@@ -38,12 +39,19 @@ class SensorReader:
         "ph_suelo": (0, 14),
     }
 
+    # Mediana movil sobre las ultimas N lecturas por sensor para descartar spikes
+    # transitorios (ej. ruido electrico, lectura DHT22 erratica). 5 lecturas con
+    # intervalo de 5s = 25s de historia. Aumentar si los peaks son frecuentes,
+    # bajar si querés que cambios reales se reflejen mas rapido.
+    MEDIAN_WINDOW = 5
+
     def __init__(self, config):
         self.config = config
         self.sensores = config.obtener("sensores", {})
         self._drivers = {}  # Cache de drivers inicializados
         self._sensor_status = {}  # Estado de salud de cada sensor
         self._arduino_hub = None  # Singleton por puerto serial
+        self._reading_buffers = {}  # (variable, sensor_id) -> deque(maxlen=MEDIAN_WINDOW)
 
         # Inicializar Arduino hub si hay sensores ARDUINO_SERIAL
         arduino_config = config.obtener("arduino", {})
@@ -85,9 +93,14 @@ class SensorReader:
         return self._drivers.get(sensor_id)
 
     def _read_single(self, variable, sensor_config):
-        """Lee un solo sensor y retorna el valor para la variable."""
+        """Lee un solo sensor y retorna el valor para la variable.
+
+        El valor pasa por un filtro de mediana movil (MEDIAN_WINDOW lecturas)
+        para descartar spikes transitorios antes de llegar al consolidador.
+        """
         sensor_id = sensor_config["id"]
         tipo = sensor_config["tipo"]
+        raw_value = None
 
         try:
             if tipo == "DHT22":
@@ -108,19 +121,18 @@ class SensorReader:
                     time.sleep(2.0)
                 self._sensor_status[sensor_id] = "ok" if temperature is not None else "sin_datos"
                 if variable == "temperatura":
-                    return temperature
+                    raw_value = temperature
                 elif variable == "humedad":
-                    return humidity
+                    raw_value = humidity
 
             elif tipo == "CO2_PWM":
                 driver = self._get_driver(sensor_config)
                 result = driver.read()
                 if result and result.get("co2") is not None:
                     self._sensor_status[sensor_id] = "ok"
-                    return result["co2"]
+                    raw_value = result["co2"]
                 else:
                     self._sensor_status[sensor_id] = "sin_datos"
-                    return None
 
             elif tipo == "ARDUINO_SERIAL":
                 if not self._arduino_hub:
@@ -134,15 +146,16 @@ class SensorReader:
                 value = self._arduino_hub.get_reading(sensor_id, field=field)
                 if value is not None:
                     self._sensor_status[sensor_id] = "ok"
-                    return value
+                    raw_value = value
                 else:
                     self._sensor_status[sensor_id] = "sin_datos"
-                    return None
 
         except Exception as e:
             self._sensor_status[sensor_id] = f"error: {e}"
             print(f"Error leyendo sensor {sensor_id}: {e}")
             return None
+
+        return self._apply_median_filter(variable, sensor_id, raw_value)
 
     def _is_valid(self, variable, value):
         """Verifica si un valor esta dentro del rango valido."""
@@ -152,6 +165,19 @@ class SensorReader:
         if rango:
             return rango[0] <= value <= rango[1]
         return True
+
+    def _apply_median_filter(self, variable, sensor_id, value):
+        # Mediana movil para descartar spikes. Solo valores validos entran al
+        # buffer (lo invalidos siguen siendo invalidos rio abajo).
+        if value is None or not self._is_valid(variable, value):
+            return value
+        key = (variable, sensor_id)
+        buf = self._reading_buffers.get(key)
+        if buf is None:
+            buf = deque(maxlen=self.MEDIAN_WINDOW)
+            self._reading_buffers[key] = buf
+        buf.append(value)
+        return statistics.median(buf)
 
     def _consolidate(self, values):
         """Consolida multiples lecturas usando mediana."""

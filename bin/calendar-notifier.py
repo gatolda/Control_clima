@@ -102,7 +102,7 @@ def main() -> None:
                 f"Llevas *{days_in_stage} dias* en {stage_label}{extra}.\n"
                 f"Te toca avanzar a *{nxt_label}*.\n\n"
                 f"Confirmá en el dashboard:\n"
-                f"https://raspberrypi.taild496a5.ts.net/calendar"
+                f"https://iagrow.cl/calendar"
             )
             if send_telegram(msg):
                 sent_count += 1
@@ -118,7 +118,7 @@ def main() -> None:
         msg = (
             f"📅 *{when}* — {label}{notes_block}\n\n"
             f"Marcá como hecho cuando termines:\n"
-            f"https://raspberrypi.taild496a5.ts.net/calendar"
+            f"https://iagrow.cl/calendar"
         )
         if send_telegram(msg):
             db.mark_event_telegram_sent(ev["id"])
@@ -142,7 +142,7 @@ def main() -> None:
         desc_block = f"\n_{desc}_" if desc else ""
         msg = (
             f"🔁 *Tarea recurrente* — {title}{desc_block}\n\n"
-            f"https://raspberrypi.taild496a5.ts.net/calendar"
+            f"https://iagrow.cl/calendar"
         )
         if send_telegram(msg):
             sent_count += 1

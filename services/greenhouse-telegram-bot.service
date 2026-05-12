@@ -1,0 +1,20 @@
+[Unit]
+Description=Greenhouse Telegram Bot (interactive, long-polling)
+After=network-online.target greenhouse.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kowen
+Group=kowen
+WorkingDirectory=/home/kowen/proyectos/Control_clima
+EnvironmentFile=/home/kowen/proyectos/Control_clima/.env
+ExecStart=/home/kowen/proyectos/Control_clima/.venv/bin/python /home/kowen/proyectos/Control_clima/bin/telegram-bot.py
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=append:/var/log/greenhouse-telegram-bot.log
+StandardError=append:/var/log/greenhouse-telegram-bot.log
+
+[Install]
+WantedBy=multi-user.target

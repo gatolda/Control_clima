@@ -48,9 +48,13 @@ const unsigned long HEARTBEAT_INTERVAL_MS = 30000UL;
 #define DHT_PIN_2 4
 #define DHT_TYPE DHT22
 
-// MH-Z19D (PWM)
-#define CO2_PWM_PIN 3
-const long CO2_RANGE_PPM = 5000;  // datasheet: rango 0-5000 ppm
+// MH-Z19D (UART via Serial3: D14=TX3 al Rx del sensor, D15=RX3 al Tx del sensor)
+// UART es mas preciso que PWM y necesario para que el sensor entre en modo
+// "midiendo activamente" (los 2 LEDs encendidos). Power-cycle requerido si
+// veniste de modo PWM puro.
+#define CO2_SERIAL Serial3
+const unsigned long CO2_BAUD = 9600;
+const unsigned long CO2_QUERY_INTERVAL_MS = 5000UL;
 
 // Suelo capacitivo
 #define SOIL_COUNT 6
@@ -82,11 +86,8 @@ struct SoilCal {
 };
 SoilCal calibrations[SOIL_COUNT];
 
-// CO2 PWM medido por interrupt (asincrono)
-volatile unsigned long co2_high_us  = 0;
-volatile unsigned long co2_total_us = 0;
-volatile unsigned long co2_last_rise_us = 0;
-volatile bool          co2_ready    = false;
+// CO2 UART: ultimo valor leido (consulta cada 5s desde loop)
+int  co2_last_ppm  = -1;
 
 unsigned long last_send_ms = 0;
 unsigned long last_heartbeat_ms = 0;
@@ -102,8 +103,7 @@ void setup() {
     dht1.begin();
     dht2.begin();
 
-    pinMode(CO2_PWM_PIN, INPUT);
-    attachInterrupt(digitalPinToInterrupt(CO2_PWM_PIN), co2_isr, CHANGE);
+    CO2_SERIAL.begin(CO2_BAUD);
 
     for (int i = 0; i < SOIL_COUNT; i++) {
         pinMode(SOIL_PINS[i], INPUT);
@@ -112,9 +112,29 @@ void setup() {
     loadCalibrations();
 
     delay(2500);  // dejar que sensores se estabilicen al arranque
-    Serial.print(F("{\"status\":\"ready\",\"version\":3,\"sensors\":"));
-    Serial.print(SOIL_COUNT + 3);  // 2 DHT22 + 1 CO2 + N soil
+
+    // Deshabilitar ABC del MH-Z19D al boot. La Auto Baseline Correction asume
+    // que el min de 24h = 400 ppm fresh air, y en ambientes mal ventilados
+    // (o despues de exposicion a humo) corrompe la baseline y el sensor
+    // queda stuck en 5000 ppm. Disable + zero calibration en aire fresco = fix.
+    sendMHZCommand(0x79, 0x00);
+
+    Serial.print(F("{\"status\":\"ready\",\"version\":4,\"sensors\":"));
+    Serial.print(SOIL_COUNT + 3);
     Serial.println(F("}"));
+}
+
+// Manda un comando MH-Z19D con un solo byte de payload (byte 3).
+// Para comandos que toman mas data, hay sendMHZCommandFull.
+void sendMHZCommand(uint8_t cmd, uint8_t payload) {
+    while (CO2_SERIAL.available()) CO2_SERIAL.read();
+    uint8_t pkt[9] = { 0xFF, 0x01, cmd, payload, 0, 0, 0, 0, 0 };
+    uint8_t sum = 0;
+    for (int i = 1; i < 8; i++) sum += pkt[i];
+    pkt[8] = (uint8_t)(0xFF - sum + 1);
+    CO2_SERIAL.write(pkt, 9);
+    CO2_SERIAL.flush();
+    // No esperamos respuesta para comandos write (algunos sensores no responden)
 }
 
 void loop() {
@@ -137,41 +157,39 @@ void loop() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// CO2 PWM (MH-Z19D)
+// CO2 UART (MH-Z19D)
 // ══════════════════════════════════════════════════════════════
+// Protocolo: master envia 9 bytes (cmd 0x86 = read CO2), sensor responde
+// 9 bytes. ppm = response[2]*256 + response[3]. Checksum byte 8.
 
-void co2_isr() {
-    unsigned long now = micros();
-    if (digitalRead(CO2_PWM_PIN) == HIGH) {
-        // rising edge
-        if (co2_last_rise_us > 0) {
-            co2_total_us = now - co2_last_rise_us;
-        }
-        co2_last_rise_us = now;
-    } else {
-        // falling edge
-        if (co2_last_rise_us > 0) {
-            co2_high_us = now - co2_last_rise_us;
-            co2_ready = true;
+bool readCO2_uart(int &ppm) {
+    // Vaciar buffer de basura previa
+    while (CO2_SERIAL.available()) CO2_SERIAL.read();
+
+    // Comando READ CO2: FF 01 86 00 00 00 00 00 79
+    static const uint8_t cmd[9] = { 0xFF, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79 };
+    CO2_SERIAL.write(cmd, 9);
+    CO2_SERIAL.flush();
+
+    // Esperar hasta 200ms por los 9 bytes de respuesta
+    uint8_t resp[9];
+    unsigned long start = millis();
+    int got = 0;
+    while (got < 9 && (millis() - start) < 200UL) {
+        if (CO2_SERIAL.available()) {
+            resp[got++] = CO2_SERIAL.read();
         }
     }
-}
+    if (got < 9) return false;
+    if (resp[0] != 0xFF || resp[1] != 0x86) return false;
 
-int readCO2() {
-    // MH-Z19D: 1 Hz cycle, ppm = range * (high_ms - 2) / (cycle_ms - 4)
-    if (!co2_ready) return -1;
+    // Checksum: ~(sum bytes 1..7) + 1 == byte 8
+    uint8_t sum = 0;
+    for (int i = 1; i < 8; i++) sum += resp[i];
+    if ((uint8_t)(0xFF - sum + 1) != resp[8]) return false;
 
-    noInterrupts();
-    unsigned long high_us  = co2_high_us;
-    unsigned long total_us = co2_total_us;
-    interrupts();
-
-    if (total_us < 900000UL || total_us > 1100000UL) return -1;  // ciclo no es ~1Hz
-
-    long ppm = CO2_RANGE_PPM * ((long)high_us - 2000L) / ((long)total_us - 4000L);
-    if (ppm < 0) ppm = 0;
-    if (ppm > CO2_RANGE_PPM) ppm = CO2_RANGE_PPM;
-    return (int)ppm;
+    ppm = ((int)resp[2] << 8) | resp[3];
+    return true;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -296,6 +314,20 @@ void handleSerialCommand() {
         saveCalibrations();
         Serial.println(F("{\"reset\":true}"));
     }
+    else if (cmd == "CO2_ABC_OFF") {
+        sendMHZCommand(0x79, 0x00);
+        Serial.println(F("{\"mhz_abc\":\"off\"}"));
+    }
+    else if (cmd == "CO2_ABC_ON") {
+        sendMHZCommand(0x79, 0xA0);
+        Serial.println(F("{\"mhz_abc\":\"on\"}"));
+    }
+    else if (cmd == "CO2_CAL_ZERO") {
+        // PELIGRO: solo usar si el sensor lleva 20+ min en aire fresco (~400 ppm).
+        // Esto re-calibra el zero del sensor al valor actual asumiendo 400 ppm.
+        sendMHZCommand(0x87, 0x00);
+        Serial.println(F("{\"mhz_zero_cal\":\"sent\"}"));
+    }
     else {
         Serial.print(F("{\"error\":\"unknown_command\",\"cmd\":\""));
         Serial.print(cmd);
@@ -327,7 +359,12 @@ void sendReadings() {
     float hum_1    = dht1.readHumidity();
     float temp_c_2 = dht2.readTemperature();
     float hum_2    = dht2.readHumidity();
-    int   co2      = readCO2();
+
+    int co2_value = -1;
+    if (readCO2_uart(co2_value)) {
+        co2_last_ppm = co2_value;
+    }
+    int co2 = co2_last_ppm;
 
     Serial.print(F("{\"sensors\":["));
     bool first = true;

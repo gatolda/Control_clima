@@ -936,7 +936,8 @@ function drawChart(highlightIdx) {
 
     const W = rect.width;
     const H = rect.height;
-    const pad = { top: 10, right: 12, bottom: 22, left: 42 };
+    // pad.right amplio para acomodar los 2 ejes Y derechos (humedad % + CO2 ppm)
+    const pad = { top: 10, right: 78, bottom: 22, left: 42 };
     const plotW = W - pad.left - pad.right;
     const plotH = H - pad.top - pad.bottom;
 
@@ -981,21 +982,44 @@ function drawChart(highlightIdx) {
         ctx.fill();
     }
 
-    drawLine(chartData.temp, 'rgb(239, 68, 68)', 50);
-    drawLine(chartData.hum, 'rgb(59, 130, 246)', 100);
-    drawLine(chartData.co2.map(v => v / 20), 'rgb(167, 139, 250)', 100);
+    const tempColor = 'rgb(239, 68, 68)';
+    const humColor  = 'rgb(59, 130, 246)';
+    const co2Color  = 'rgb(167, 139, 250)';
+    const TEMP_MAX = 50;    // 0-50 °C
+    const HUM_MAX  = 100;   // 0-100 %
+    const CO2_MAX  = 2000;  // 0-2000 ppm
 
-    // Y axis labels
+    drawLine(chartData.temp, tempColor, TEMP_MAX);
+    drawLine(chartData.hum,  humColor,  HUM_MAX);
+    drawLine(chartData.co2.map(v => v / (CO2_MAX / 100)), co2Color, 100);
+
+    // ─── Ejes Y ───
+    // Izquierdo (rojo):  Temperatura °C
+    // Derecho cerca (azul):  Humedad %
+    // Derecho lejos (purple): CO2 ppm
     const labelColor = getComputedStyle(document.documentElement)
         .getPropertyValue('--text-muted').trim() || '#5a5b63';
-    ctx.fillStyle = labelColor;
+
     ctx.font = '10px "JetBrains Mono", monospace';
-    ctx.textAlign = 'right';
     for (let i = 0; i <= 4; i++) {
         const y = pad.top + (plotH / 4) * i;
-        const val = Math.round(50 - (50 / 4) * i);
-        ctx.fillText(val + '°', pad.left - 8, y + 3);
+        const tempVal = Math.round(TEMP_MAX - (TEMP_MAX / 4) * i);
+        const humVal  = Math.round(HUM_MAX  - (HUM_MAX  / 4) * i);
+        const co2Val  = Math.round(CO2_MAX  - (CO2_MAX  / 4) * i);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = tempColor;
+        ctx.fillText(tempVal + '°', pad.left - 8, y + 3);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = humColor;
+        ctx.fillText(humVal + '%', W - pad.right + 6, y + 3);
+
+        ctx.fillStyle = co2Color;
+        ctx.fillText(co2Val, W - pad.right + 44, y + 3);
     }
+    // Restaurar color por defecto por si algun draw posterior lo asume
+    ctx.fillStyle = labelColor;
 
     // Crosshair
     if (highlightIdx != null && chartData.temp.length > 0) {
@@ -1019,9 +1043,9 @@ function drawChart(highlightIdx) {
             ctx.arc(x, y, 3, 0, Math.PI * 2);
             ctx.fill();
         };
-        drawDot(chartData.temp, 50, 'rgb(239, 68, 68)');
-        drawDot(chartData.hum, 100, 'rgb(59, 130, 246)');
-        drawDot(chartData.co2.map(v => v / 20), 100, 'rgb(167, 139, 250)');
+        drawDot(chartData.temp, TEMP_MAX, tempColor);
+        drawDot(chartData.hum,  HUM_MAX,  humColor);
+        drawDot(chartData.co2.map(v => v / (CO2_MAX / 100)), 100, co2Color);
     }
 }
 

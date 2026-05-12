@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 from datetime import datetime
@@ -23,9 +24,8 @@ import requests
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = PROJECT_ROOT / ".env"
+DB_PATH = PROJECT_ROOT / "data" / "greenhouse.db"
 HEALTH_URL = os.environ.get("HEALTH_URL", "http://127.0.0.1:5000/health")
-CLIMATE_URL = os.environ.get("CLIMATE_URL", "http://127.0.0.1:5000/api/climate/status")
-SENSORS_URL = os.environ.get("SENSORS_URL", "http://127.0.0.1:5000/api/sensors")
 BACKUP_LOG = Path("/var/log/greenhouse-backup.log")
 
 
@@ -60,22 +60,79 @@ def get_health() -> dict:
         return {"error": str(e)}
 
 
-def get_climate() -> dict:
+def _db_conn() -> sqlite3.Connection | None:
+    if not DB_PATH.exists():
+        return None
     try:
-        return requests.get(CLIMATE_URL, timeout=5).json()
+        conn = sqlite3.connect(str(DB_PATH), timeout=3)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception:
+        return None
+
+
+def get_climate() -> dict:
+    """Lee modo, etapa y fotoperiodo directo de la tabla config."""
+    conn = _db_conn()
+    if conn is None:
+        return {}
+    try:
+        rows = conn.execute("SELECT key, value FROM config").fetchall()
+        cfg = {r["key"]: r["value"] for r in rows}
+        light_on = int(cfg["light_on_hour"]) if cfg.get("light_on_hour", "").isdigit() else None
+        light_off = int(cfg["light_off_hour"]) if cfg.get("light_off_hour", "").isdigit() else None
+        light_hours = None
+        if light_on is not None and light_off is not None:
+            light_hours = (light_off - light_on) % 24 or 24
+        return {
+            "mode": cfg.get("mode"),
+            "stage": cfg.get("stage"),
+            "light_on_hour": light_on,
+            "light_off_hour": light_off,
+            "light_hours": light_hours,
+        }
     except Exception as e:
         return {"error": str(e)}
+    finally:
+        conn.close()
 
 
 def get_sensors() -> dict:
-    """Lecturas actuales (auth-protected, usa cookie de sesion no — devuelve {})."""
+    """Lecturas mas recientes leidas directamente de sensor_readings + soil_readings."""
+    conn = _db_conn()
+    if conn is None:
+        return {}
+    out: dict = {}
     try:
-        r = requests.get(SENSORS_URL, timeout=5, allow_redirects=False)
-        if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
-            return r.json()
-    except Exception:
-        pass
-    return {}
+        # Lectura ambiental mas reciente
+        row = conn.execute(
+            "SELECT timestamp, temperature, humidity, co2, vpd "
+            "FROM sensor_readings ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if row:
+            out["temperatura"] = {"value": row["temperature"]} if row["temperature"] is not None else None
+            out["humedad"]     = {"value": row["humidity"]}    if row["humidity"]    is not None else None
+            out["co2"]         = {"value": row["co2"]}         if row["co2"]         is not None else None
+            out["vpd"]         = {"value": row["vpd"]}         if row["vpd"]         is not None else None
+            out["_timestamp"]  = row["timestamp"]
+
+        # Humedad de suelo: ultima lectura por zona
+        soil_rows = conn.execute("""
+            SELECT zone_id, value, MAX(timestamp) as ts
+            FROM soil_readings
+            WHERE variable = 'humedad_suelo'
+            GROUP BY zone_id
+        """).fetchall()
+        if soil_rows:
+            zones = {}
+            for r in soil_rows:
+                zones[r["zone_id"]] = round(r["value"], 1)
+            out["humedad_suelo"] = zones
+    except Exception as e:
+        out["_error"] = str(e)
+    finally:
+        conn.close()
+    return out
 
 
 def get_last_backup() -> str:
@@ -154,16 +211,21 @@ def build_report() -> str:
     light_off = (light_on + light_h) % 24 if light_on is not None and light_h else None
     light_str = f"{light_on:02d}:00 → {light_off:02d}:00 ({light_h}h)" if light_on is not None and light_off is not None else "?"
 
-    # Sensor values from /api/sensors si responde, sino de health.last_reading
+    # Sensor values: lee de la DB. humedad_suelo viene como dict por zona.
     s_lines = []
-    if sensors:
-        for k in ("temperatura", "humedad", "co2", "humedad_suelo"):
-            v = sensors.get(k)
-            if isinstance(v, dict) and "value" in v:
-                v = v["value"]
-            if v is not None:
-                unit_map = {"temperatura": "°C", "humedad": "%", "co2": "ppm", "humedad_suelo": "%"}
-                s_lines.append(f"  {k.replace('_', ' ').title()}: {v}{unit_map.get(k, '')}")
+    unit_map = {"temperatura": "°C", "humedad": "%", "co2": "ppm", "vpd": "kPa"}
+    for k in ("temperatura", "humedad", "co2", "vpd"):
+        v = sensors.get(k)
+        if isinstance(v, dict) and "value" in v:
+            v = v["value"]
+        if v is not None:
+            s_lines.append(f"  {k.replace('_', ' ').title()}: `{v}{unit_map.get(k, '')}`")
+    soil = sensors.get("humedad_suelo")
+    if isinstance(soil, dict) and soil:
+        # zone_id puede contener "_" → meterlo dentro de backticks asi
+        # Markdown legacy de Telegram no lo interpreta como italica.
+        zones_str = ", ".join(f"`{z}={p}%`" for z, p in sorted(soil.items()))
+        s_lines.append(f"  Humedad Suelo: {zones_str}")
     if not s_lines and last_age is not None:
         s_lines.append(f"  Última lectura: hace {int(last_age)}s")
 
@@ -203,7 +265,7 @@ _{datetime.now().strftime("%Y-%m-%d %H:%M")}_
 • RAM: {get_mem()}
 
 *Acceso*
-[Dashboard](https://raspberrypi-1.taild496a5.ts.net)"""
+[Dashboard](https://iagrow.cl)"""
 
 
 def send(token: str, chat_id: str, text: str) -> bool:

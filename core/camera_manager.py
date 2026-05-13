@@ -1,235 +1,183 @@
 """
-Gestion de camara y analisis de imagen con IA.
-Captura fotos con Pi Camera y las analiza usando Claude Vision.
+Gestion de camara USB UVC (Logitech C270 / C920 / similar) via fswebcam.
+
+Toma snapshots on-demand desde la API y los guarda en static/camera/.
+El scheduling de fotos periodicas se hace con systemd timer
+(`greenhouse-snapshot.timer`), no con thread interno — mas robusto.
+
+Analisis IA con Claude Vision (opcional) queda como hook futuro,
+no se invoca por defecto.
 """
-import threading
-import time
+from __future__ import annotations
+
 import os
-import base64
+import re
+import shutil
+import subprocess
 from datetime import datetime
+from pathlib import Path
 
-try:
-    from picamera2 import Picamera2
-except ImportError:
-    Picamera2 = None
-
-try:
-    import anthropic
-except ImportError:
-    anthropic = None
-
-CAPTURE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "captures")
+CAMERA_DEVICE_DEFAULT = "/dev/video0"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CAPTURE_DIR  = PROJECT_ROOT / "static" / "camera"
+LATEST_LINK  = CAPTURE_DIR / "latest.jpg"
 
 
 class CameraManager:
-    """
-    Captura imagenes del invernadero y las analiza con Claude Vision.
-
-    Funcionalidades:
-    - Captura manual desde dashboard
-    - Captura automatica programada
-    - Analisis IA de salud de plantas
-    - Historial de capturas y analisis
-    """
+    """Captura imagenes USB via fswebcam. Almacena en static/camera/."""
 
     def __init__(self, config, database):
         self.config = config
         self.db = database
-        self.enabled = config.obtener("camara.habilitada", False)
-        self.resolution = config.obtener("camara.resolucion", [1920, 1080])
-        self.interval_minutes = config.obtener("camara.intervalo_minutos", 60)
-        self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        self._camera = None
-        self._running = False
-        self._thread = None
-        self._last_analysis = None
+        cam_cfg = config.obtener("camara", {}) if hasattr(config, "obtener") else {}
+        self.enabled    = cam_cfg.get("habilitada", True)
+        self.device     = cam_cfg.get("dispositivo", CAMERA_DEVICE_DEFAULT)
+        # C270 max es 960x720 nativo, 1280x720 escalado. Default seguro.
+        self.resolution = cam_cfg.get("resolucion", [960, 720])
+        self.skip_frames = int(cam_cfg.get("skip_frames", 10))
+        self.capture_frames = int(cam_cfg.get("capture_frames", 3))
+        self.jpeg_quality = int(cam_cfg.get("jpeg_quality", 85))
 
-        os.makedirs(CAPTURE_DIR, exist_ok=True)
+        CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+
+        if self.enabled and not shutil.which("fswebcam"):
+            print("CameraManager: fswebcam no instalado. `sudo apt install fswebcam`")
+            self.enabled = False
 
         if self.enabled:
-            print(f"CameraManager: habilitada, intervalo={self.interval_minutes}min")
+            print(f"CameraManager: ON, device={self.device}, res={self.resolution[0]}x{self.resolution[1]}")
         else:
-            print("CameraManager: deshabilitada en config")
+            print("CameraManager: deshabilitada")
 
-    def start(self):
-        """Inicia captura automatica."""
+    def capture(self) -> dict:
+        """Toma una foto y devuelve info del archivo."""
         if not self.enabled:
-            return
-        if Picamera2 is None:
-            print("CameraManager: picamera2 no disponible")
-            return
+            return {"ok": False, "error": "camara_deshabilitada"}
 
-        self._running = True
-        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
-        self._thread.start()
-        print("CameraManager: captura automatica iniciada")
+        ts = datetime.now()
+        filename = f"snap_{ts:%Y%m%d_%H%M%S}.jpg"
+        filepath = CAPTURE_DIR / filename
 
-    def stop(self):
-        """Detiene captura automatica."""
-        self._running = False
-        if self._camera:
+        # fswebcam params:
+        # --skip N: descarta los primeros N frames (la webcam tarda en ajustar
+        #   exposicion/balance, los primeros frames suelen estar mal expuestos)
+        # -F N: promedia N frames para reducir ruido y movimiento
+        # -S N: salta N frames antes de capturar (estabilizacion adicional)
+        # --no-banner: evita la barra negra con timestamp/texto en la foto
+        # -q: quieter
+        cmd = [
+            "fswebcam",
+            "-d", self.device,
+            "-r", f"{self.resolution[0]}x{self.resolution[1]}",
+            "--no-banner",
+            "--skip", str(self.skip_frames),
+            "-F", str(self.capture_frames),
+            "-S", "5",
+            "--jpeg", str(self.jpeg_quality),
+            "-q",
+            str(filepath),
+        ]
+        try:
+            res = subprocess.run(cmd, capture_output=True, timeout=20, text=True)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "timeout_capturando"}
+        except Exception as e:
+            return {"ok": False, "error": f"exception: {e}"}
+
+        if res.returncode != 0 or not filepath.exists():
+            return {"ok": False, "error": f"fswebcam_failed: {res.stderr[:200]}"}
+
+        file_size = filepath.stat().st_size
+
+        # Symlink "latest.jpg" apunta a la ultima capturada (para el dashboard).
+        try:
+            if LATEST_LINK.exists() or LATEST_LINK.is_symlink():
+                LATEST_LINK.unlink()
+            LATEST_LINK.symlink_to(filename)
+        except Exception:
+            # Si symlinks no son soportados (FS raro), copiamos
             try:
-                self._camera.close()
+                shutil.copy2(filepath, LATEST_LINK)
             except Exception:
                 pass
 
-    def _init_camera(self):
-        """Inicializa la camara."""
-        if self._camera is not None:
-            return True
-        if Picamera2 is None:
-            return False
-        try:
-            self._camera = Picamera2()
-            config = self._camera.create_still_configuration(
-                main={"size": tuple(self.resolution)}
-            )
-            self._camera.configure(config)
-            self._camera.start()
-            time.sleep(2)  # Warm-up
-            return True
-        except Exception as e:
-            print(f"CameraManager: error inicializando camara: {e}")
-            self._camera = None
-            return False
+        # Brightness del frame (promedio simple usando PIL si esta disponible).
+        # Sirve para detectar "carpa abierta" (spike de brightness vs anteriores).
+        brightness = self._compute_brightness(filepath)
 
-    def _capture_loop(self):
-        """Loop de captura automatica."""
-        while self._running:
+        # Persistir metadata en DB si la tabla existe
+        snapshot_id = None
+        if self.db and hasattr(self.db, "save_camera_snapshot"):
             try:
-                result = self.capture_and_analyze()
-                if result.get("ok"):
-                    print(f"CameraManager: captura automatica OK")
+                snapshot_id = self.db.save_camera_snapshot(
+                    filename=filename,
+                    timestamp=ts.strftime("%Y-%m-%d %H:%M:%S"),
+                    file_size=file_size,
+                    brightness=brightness,
+                )
             except Exception as e:
-                print(f"CameraManager: error en captura automatica: {e}")
-
-            time.sleep(self.interval_minutes * 60)
-
-    def capture(self):
-        """Captura una foto y la guarda."""
-        if not self._init_camera():
-            return {"ok": False, "error": "Camara no disponible"}
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"capture_{timestamp}.jpg"
-        filepath = os.path.join(CAPTURE_DIR, filename)
-
-        try:
-            self._camera.capture_file(filepath)
-            print(f"CameraManager: foto guardada en {filepath}")
-            return {
-                "ok": True,
-                "filepath": filepath,
-                "filename": filename,
-                "timestamp": timestamp
-            }
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    def analyze_image(self, filepath):
-        """Analiza una imagen con Claude Vision."""
-        if not anthropic:
-            return {"ok": False, "error": "anthropic SDK no instalado"}
-        if not self.api_key:
-            return {"ok": False, "error": "ANTHROPIC_API_KEY no configurada"}
-
-        try:
-            with open(filepath, "rb") as f:
-                image_data = base64.standard_b64encode(f.read()).decode("utf-8")
-
-            client = anthropic.Anthropic(api_key=self.api_key)
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1024,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": image_data
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": (
-                                "Analiza esta imagen de un invernadero de cultivo. "
-                                "Evalua:\n"
-                                "1. **Salud general de las plantas** (1-10)\n"
-                                "2. **Color del follaje** - verde saludable, amarillamiento, manchas\n"
-                                "3. **Signos de plagas o enfermedades** - insectos, hongos, moho\n"
-                                "4. **Estado del sustrato** - humedad visible, sequedad\n"
-                                "5. **Problemas detectados** - deficiencias nutricionales, estres\n"
-                                "6. **Recomendaciones** - acciones sugeridas\n\n"
-                                "Responde en formato JSON con estas claves: "
-                                "salud_general (1-10), color_follaje, plagas, "
-                                "estado_sustrato, problemas, recomendaciones"
-                            )
-                        }
-                    ]
-                }]
-            )
-
-            analysis_text = response.content[0].text
-            self._last_analysis = {
-                "timestamp": datetime.now().isoformat(),
-                "filepath": filepath,
-                "analysis": analysis_text
-            }
-
-            return {"ok": True, "analysis": analysis_text}
-
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    def capture_and_analyze(self):
-        """Captura y analiza en un solo paso."""
-        capture = self.capture()
-        if not capture.get("ok"):
-            return capture
-
-        analysis = self.analyze_image(capture["filepath"])
-        if analysis.get("ok"):
-            # Guardar en DB
-            self.db.save_camera_event(
-                filename=capture["filename"],
-                analysis=analysis["analysis"]
-            )
+                print(f"CameraManager: error guardando metadata DB: {e}")
 
         return {
             "ok": True,
-            "capture": capture,
-            "analysis": analysis.get("analysis", ""),
-            "error": analysis.get("error")
+            "filename": filename,
+            "path": str(filepath),
+            "size_bytes": file_size,
+            "brightness": brightness,
+            "snapshot_id": snapshot_id,
+            "url": f"/static/camera/{filename}",
+            "timestamp": ts.isoformat(),
         }
 
-    def get_latest_analysis(self):
-        """Retorna el ultimo analisis."""
-        return self._last_analysis
-
-    def get_captures(self, limit=20):
-        """Lista las capturas guardadas."""
+    def _compute_brightness(self, filepath: Path) -> float | None:
+        """Promedio de brightness 0-255. None si PIL no esta disponible."""
         try:
-            files = sorted(os.listdir(CAPTURE_DIR), reverse=True)[:limit]
-            return [
-                {
-                    "filename": f,
-                    "path": os.path.join(CAPTURE_DIR, f),
-                    "timestamp": f.replace("capture_", "").replace(".jpg", "")
-                }
-                for f in files if f.endswith(".jpg")
-            ]
+            from PIL import Image, ImageStat
+            with Image.open(filepath) as img:
+                gray = img.convert("L")
+                return round(ImageStat.Stat(gray).mean[0], 2)
         except Exception:
-            return []
+            return None
 
-    def get_status(self):
-        """Estado de la camara."""
+    def get_latest_path(self) -> Path | None:
+        if LATEST_LINK.exists():
+            return LATEST_LINK
+        # Fallback: el ultimo file por mtime
+        files = sorted(CAPTURE_DIR.glob("snap_*.jpg"), reverse=True)
+        return files[0] if files else None
+
+    def list_snapshots(self, limit: int = 50) -> list[dict]:
+        """Lista snapshots ordenados por timestamp desc, mas reciente primero."""
+        # Preferir DB si tiene la info (incluye brightness + metadata)
+        if self.db and hasattr(self.db, "get_camera_snapshots"):
+            try:
+                return self.db.get_camera_snapshots(limit=limit)
+            except Exception:
+                pass
+        # Fallback al filesystem
+        files = sorted(CAPTURE_DIR.glob("snap_*.jpg"), reverse=True)[:limit]
+        out = []
+        for f in files:
+            m = re.match(r"snap_(\d{8})_(\d{6})\.jpg", f.name)
+            ts = f"{m.group(1)[0:4]}-{m.group(1)[4:6]}-{m.group(1)[6:8]} {m.group(2)[0:2]}:{m.group(2)[2:4]}:{m.group(2)[4:6]}" if m else ""
+            out.append({
+                "filename": f.name,
+                "timestamp": ts,
+                "size_bytes": f.stat().st_size,
+                "url": f"/static/camera/{f.name}",
+            })
+        return out
+
+    def get_status(self) -> dict:
+        latest = self.get_latest_path()
         return {
             "enabled": self.enabled,
-            "camera_available": Picamera2 is not None,
-            "api_configured": bool(self.api_key),
-            "captures_count": len(self.get_captures(limit=1000)),
-            "last_analysis": self._last_analysis
+            "device": self.device,
+            "resolution": self.resolution,
+            "snapshots_count": len(list(CAPTURE_DIR.glob("snap_*.jpg"))),
+            "latest_file": latest.name if latest else None,
         }
+
+    # ───── stubs para no romper integraciones existentes ─────
+    def start(self): pass  # scheduling lo hace systemd timer ahora
+    def stop(self):  pass

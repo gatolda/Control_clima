@@ -26,6 +26,7 @@ from pathlib import Path
 import requests
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))  # para `from core.x import ...` desde el bot
 ENV_PATH = PROJECT_ROOT / ".env"
 
 # Importar build_report() del send-report.py (con guión en el nombre → importlib)
@@ -74,11 +75,12 @@ HELP_TEXT = """🌱 *ia grow — bot interactivo*
 Comandos disponibles:
 
 • `/status` o `/report` → reporte completo (sensores, clima, servicios, recursos)
+• `/photo` → toma una foto AHORA con la cámara de la carpa
 • `/uptime` → uptime corto del sistema
 • `/ping` → verificar que el bot está vivo
 • `/help` → este mensaje
 
-También respondo a texto libre como _"dame un reporte"_, _"como esta"_, _"estado"_."""
+También respondo a texto libre como _"dame un reporte"_, _"sacame una foto"_, _"como esta"_."""
 
 
 def handle_ping(token: str, chat_id: int) -> None:
@@ -105,6 +107,49 @@ def handle_help(token: str, chat_id: int) -> None:
     send_message(token, chat_id, HELP_TEXT)
 
 
+def handle_photo(token: str, chat_id: int) -> None:
+    """Toma una foto AHORA y la manda al chat."""
+    send_message(token, chat_id, "📸 Tomando foto…")
+    try:
+        # Importar y usar camera_manager directamente (no via subprocess para
+        # que sea mas rapido)
+        from core.config_loader import ConfigLoader
+        from data.database import Database
+        from core.camera_manager import CameraManager
+        cfg = ConfigLoader(str(PROJECT_ROOT / "config.yml"))
+        cfg.cargar_configuracion()
+        db = Database(str(PROJECT_ROOT / "data" / "greenhouse.db"))
+        cam = CameraManager(cfg, db)
+        result = cam.capture()
+    except Exception as e:
+        send_message(token, chat_id, f"❌ Error tomando foto: `{e}`")
+        return
+
+    if not result.get("ok"):
+        send_message(token, chat_id, f"❌ Captura fallida: `{result.get('error')}`")
+        return
+
+    # Mandar la foto via sendPhoto
+    filepath = result["path"]
+    caption = (
+        f"🌱 *{datetime.now():%Y-%m-%d %H:%M}*\n"
+        f"_{result.get('size_bytes', 0) // 1024} KB · brightness {result.get('brightness', '?')}_"
+    )
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    try:
+        with open(filepath, "rb") as f:
+            r = requests.post(
+                url,
+                data={"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"},
+                files={"photo": f},
+                timeout=30,
+            )
+        if not r.ok:
+            send_message(token, chat_id, f"❌ Telegram sendPhoto fail: `{r.status_code}`")
+    except Exception as e:
+        send_message(token, chat_id, f"❌ Error enviando foto: `{e}`")
+
+
 def parse_command(text: str) -> str | None:
     """Devuelve el comando inferido del texto, o None si no se reconoce."""
     t = text.lower().strip()
@@ -116,9 +161,14 @@ def parse_command(text: str) -> str | None:
         return "uptime"
     if t.startswith("/status") or t.startswith("/report"):
         return "status"
+    if t.startswith("/photo") or t.startswith("/foto"):
+        return "photo"
     # Texto libre: matchear palabras clave
-    keywords = ("reporte", "report", "estado", "status", "como esta", "cómo está", "informe")
-    if any(k in t for k in keywords):
+    keywords_status = ("reporte", "report", "estado", "status", "como esta", "cómo está", "informe")
+    keywords_photo  = ("foto", "photo", "imagen", "picture")
+    if any(k in t for k in keywords_photo):
+        return "photo"
+    if any(k in t for k in keywords_status):
         return "status"
     return None
 
@@ -129,6 +179,7 @@ def dispatch(token: str, chat_id: int, command: str) -> None:
         "ping": handle_ping,
         "uptime": handle_uptime,
         "status": handle_status,
+        "photo": handle_photo,
     }
     fn = handlers.get(command)
     if fn:

@@ -1,0 +1,12 @@
+[Unit]
+Description=Greenhouse camera snapshot (oneshot, triggered by timer)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=kowen
+Group=kowen
+WorkingDirectory=/home/kowen/proyectos/Control_clima
+ExecStart=/home/kowen/proyectos/Control_clima/.venv/bin/python /home/kowen/proyectos/Control_clima/bin/take-snapshot.py
+StandardOutput=append:/var/log/greenhouse-snapshot.log
+StandardError=append:/var/log/greenhouse-snapshot.log

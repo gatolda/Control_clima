@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ia grow · Galería</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 14px;
+            padding: 20px 0;
+        }
+        .gallery-item {
+            background: var(--bg-surface, #15161c);
+            border: 1px solid var(--border, #2a2c36);
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.15s, border-color 0.15s;
+        }
+        .gallery-item:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent, #c0e864);
+        }
+        .gallery-thumb {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: cover;
+            display: block;
+            background: var(--bg-surface-2, #0a0b0e);
+        }
+        .gallery-meta {
+            padding: 10px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted, #8a8b95);
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .gallery-meta .ts { color: var(--text, #e6e7ec); }
+        .empty {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--text-muted, #8a8b95);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Modal */
+        .lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.92);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            cursor: zoom-out;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 100%;
+            max-height: 90vh;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .lightbox-meta {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 14px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+    {% include '_sidebar.html' ignore missing %}
+    <main class="main">
+        <header class="topbar">
+            <h1 class="page-title">Galería del cultivo</h1>
+            <div class="topbar-actions">
+                <button onclick="snapNow()" class="btn-primary" id="snap-btn"
+                        style="background: var(--accent, #c0e864); color: #0a0b0e; border: 0; padding: 8px 14px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; cursor: pointer;">
+                    📸 Tomar foto ahora
+                </button>
+            </div>
+        </header>
+
+        <div id="gallery" class="gallery">
+            <div class="empty">Cargando…</div>
+        </div>
+    </main>
+</div>
+
+<div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <img id="lightbox-img" src="" alt="">
+    <div id="lightbox-meta" class="lightbox-meta"></div>
+</div>
+
+<script>
+function fmtTs(s) {
+    // "2026-05-13 00:25:16" → "13/05 00:25"
+    if (!s) return '--';
+    const m = s.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : s;
+}
+
+function fmtSize(b) {
+    if (!b) return '';
+    return (b / 1024).toFixed(0) + 'KB';
+}
+
+function loadGallery() {
+    fetch('/api/camera/history')
+        .then(r => r.json())
+        .then(snaps => {
+            const g = document.getElementById('gallery');
+            if (!Array.isArray(snaps) || snaps.length === 0) {
+                g.innerHTML = '<div class="empty">Aún no hay fotos. Apretá "Tomar foto ahora" para crear la primera.</div>';
+                return;
+            }
+            g.innerHTML = '';
+            snaps.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'gallery-item';
+                item.onclick = () => openLightbox(s);
+                item.innerHTML = `
+                    <img class="gallery-thumb" loading="lazy" src="${s.url}" alt="">
+                    <div class="gallery-meta">
+                        <span class="ts">${fmtTs(s.timestamp)}</span>
+                        <span>${fmtSize(s.file_size)}${s.brightness != null ? ' · ' + Math.round(s.brightness) + 'b' : ''}</span>
+                    </div>
+                `;
+                g.appendChild(item);
+            });
+        })
+        .catch(e => {
+            document.getElementById('gallery').innerHTML = '<div class="empty">Error cargando galería: ' + e + '</div>';
+        });
+}
+
+function openLightbox(s) {
+    document.getElementById('lightbox-img').src = s.url;
+    document.getElementById('lightbox-meta').textContent =
+        `${fmtTs(s.timestamp)} · ${fmtSize(s.file_size)}` +
+        (s.brightness != null ? ` · brightness ${Math.round(s.brightness)}` : '');
+    document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox();
+});
+
+function snapNow() {
+    const btn = document.getElementById('snap-btn');
+    const original = btn.innerHTML;
+    btn.innerHTML = '📸 Capturando…';
+    btn.disabled = true;
+    fetch('/api/camera/capture', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                setTimeout(loadGallery, 500);
+            } else {
+                alert('Error: ' + (data.error || 'unknown'));
+            }
+        })
+        .finally(() => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+        });
+}
+
+loadGallery();
+setInterval(loadGallery, 5 * 60 * 1000);
+</script>
+</body>
+</html>

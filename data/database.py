@@ -878,6 +878,53 @@ class Database:
         conn.close()
         return [dict(r) for r in rows]
 
+    # --- Snapshots de camara USB (UVC webcam) ---
+    # Distinto de camera_events (que era del analisis IA viejo con Picamera).
+    # camera_snapshots guarda metadata de cada foto fisica tomada por fswebcam.
+
+    def save_camera_snapshot(self, filename, timestamp, file_size=None, brightness=None):
+        """Guarda metadata de un snapshot. Devuelve el id."""
+        conn = self._get_conn()
+        # Crear tabla si no existe (migration idempotente)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS camera_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT UNIQUE NOT NULL,
+                timestamp DATETIME NOT NULL,
+                file_size INTEGER,
+                brightness REAL,
+                created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO camera_snapshots (filename, timestamp, file_size, brightness) VALUES (?, ?, ?, ?)",
+            (filename, timestamp, file_size, brightness),
+        )
+        snap_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return snap_id
+
+    def get_camera_snapshots(self, limit=50):
+        """Lista snapshots ordenados por id desc (mas reciente primero)."""
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT id, filename, timestamp, file_size, brightness "
+                "FROM camera_snapshots ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        except Exception:
+            # Tabla aun no existe (primer arranque)
+            rows = []
+        conn.close()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["url"] = f"/static/camera/{d['filename']}"
+            out.append(d)
+        return out
+
     # --- Limpieza ---
 
     def cleanup_old_data(self, days=30):

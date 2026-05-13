@@ -492,7 +492,7 @@ def soil_history():
 @app.route("/api/camera/capture", methods=["POST"])
 @role_required("admin", "operator")
 def camera_capture():
-    result = camera_manager.capture_and_analyze()
+    result = camera_manager.capture()
     return jsonify(result)
 
 @app.route("/api/camera/status")
@@ -500,17 +500,29 @@ def camera_capture():
 def camera_status():
     return jsonify(camera_manager.get_status())
 
+@app.route("/api/camera/latest")
+@login_required
+def camera_latest():
+    latest = camera_manager.get_latest_path()
+    if not latest:
+        return jsonify({"ok": False, "error": "sin_capturas"}), 404
+    return jsonify({
+        "ok": True,
+        "url": f"/static/camera/{latest.name}",
+        "filename": latest.name,
+        "size_bytes": latest.stat().st_size,
+    })
+
 @app.route("/api/camera/history")
 @login_required
 def camera_history():
-    events = db.get_camera_events(limit=20)
-    return jsonify(events)
+    snapshots = camera_manager.list_snapshots(limit=50)
+    return jsonify(snapshots)
 
-@app.route("/api/camera/image/<filename>")
+@app.route("/camera")
 @login_required
-def camera_image(filename):
-    from flask import send_from_directory
-    return send_from_directory("data/captures", filename)
+def camera_gallery():
+    return render_template("camera.html")
 
 # --- Climate Controller API ---
 
@@ -979,7 +991,7 @@ def api_feeds_delete(feed_id):
 
 # --- Photos / camera ---
 
-CAPTURE_DIR = os.path.join(os.path.dirname(__file__), "data", "captures")
+CAPTURE_DIR = os.path.join(os.path.dirname(__file__), "static", "camera")
 
 @app.route("/api/cycle/photos", methods=["GET"])
 @login_required

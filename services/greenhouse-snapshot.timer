@@ -1,0 +1,15 @@
+[Unit]
+Description=Take greenhouse camera snapshot every 4 hours
+Requires=greenhouse-snapshot.service
+
+[Timer]
+# Toma 1 foto al boot (5 min despues) y luego cada 4 horas.
+# 6 fotos/dia × 90 dias = 540 fotos por ciclo de cultivo,
+# suficiente para time-lapse y monitoreo sin saturar el disco.
+OnBootSec=5min
+OnUnitActiveSec=4h
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

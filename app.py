@@ -394,10 +394,15 @@ def health():
         issues.append("sensors")
 
     # 3. Sensor health (DHT22, CO2, etc.)
+    # get_sensor_health() devuelve {sensor_id: status_string}. Acepta
+    # string ("ok"/"sin_datos"/"error: ...") o dict por compatibilidad futura.
     try:
         sh = sensor_reader.get_sensor_health()
         for name, info in (sh or {}).items():
-            ok = info.get("status") == "ok" or info.get("healthy") is True
+            if isinstance(info, dict):
+                ok = info.get("status") == "ok" or info.get("healthy") is True
+            else:
+                ok = info == "ok"
             if not ok:
                 issues.append(f"{name}_unhealthy")
         components["sensor_health"] = sh

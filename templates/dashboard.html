@@ -73,6 +73,14 @@
                 <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 <span>Diagnosticos</span>
             </a>
+            <a href="/camera" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Cámara</span>
+            </a>
+            <a href="/cultivo" class="nav-item">
+                <svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                <span>Cultivo</span>
+            </a>
 
             <div class="sidebar-nav-section">Configuracion</div>
             <a href="/inventory" class="nav-item">
@@ -520,7 +528,7 @@
                     <img id="camera-img" alt="Última foto del invernadero"
                          style="width: 100%; height: 100%; object-fit: cover; display: block;">
                     <div id="camera-empty" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 12px;">
-                        Sin fotos disponibles
+                        Cargando galería…
                     </div>
                     <div id="camera-meta" style="position: absolute; bottom: 0; left: 0; right: 0; padding: 10px 14px; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.7)); color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
                         <span id="camera-timestamp">--:--</span>
@@ -529,6 +537,32 @@
                             📸 Tomar foto
                         </button>
                     </div>
+                </div>
+                <!-- Tira de miniaturas -->
+                <div id="camera-thumbs" style="display: flex; gap: 6px; padding: 10px; overflow-x: auto; background: var(--bg-surface-2, #0a0b0e); border-top: 1px solid var(--border, #2a2c36); scrollbar-width: thin;">
+                    <!-- thumbnails injected by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== Diagnostico IA ========== -->
+        <section class="section" id="cultivo-section" style="display: none;">
+            <div class="section-head">
+                <div class="section-title">Diagnóstico IA</div>
+                <a href="/cultivo" class="section-action">Ver historial →</a>
+            </div>
+            <div class="card fade" style="padding: 16px 18px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; align-items: baseline; gap: 8px;">
+                    <span id="cultivo-health" style="font-size: 42px; font-weight: 700; line-height: 1;">--</span>
+                    <span style="font-size: 12px; color: var(--text-muted);">/10 salud</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 220px;">
+                    <div id="cultivo-pills" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+                    <div id="cultivo-summary" style="font-size: 12px; color: var(--text); line-height: 1.4;">Sin análisis aún</div>
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; text-align: right;">
+                    <span id="cultivo-when">--</span><br>
+                    confianza <span id="cultivo-confidence">--</span>/10
                 </div>
             </div>
         </section>
@@ -1141,39 +1175,98 @@ if (document.readyState === 'complete') {
 // ============================================================
 // CAMERA WIDGET
 // ============================================================
+function fmtCameraTimestamp(s) {
+    if (!s) return '--:--';
+    // soporta "snap_YYYYMMDD_HHMMSS.jpg" o "YYYY-MM-DD HH:MM:SS"
+    const fname = s.match(/snap_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
+    if (fname) return `${fname[1]}-${fname[2]}-${fname[3]} ${fname[4]}:${fname[5]}:${fname[6]}`;
+    const iso = s.match(/(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/);
+    return iso ? `${iso[1]} ${iso[2]}` : s;
+}
+
+function showCameraPhoto(url, displayLabel) {
+    const img = document.getElementById('camera-img');
+    const empty = document.getElementById('camera-empty');
+    const tsEl = document.getElementById('camera-timestamp');
+    img.style.display = 'block';
+    empty.style.display = 'none';
+    img.onerror = () => {
+        img.style.display = 'none';
+        empty.style.display = 'flex';
+    };
+    img.src = url + (url.includes('?') ? '' : '?t=' + Date.now());
+    tsEl.textContent = displayLabel || '--:--';
+    // Marcar la thumbnail seleccionada
+    document.querySelectorAll('#camera-thumbs img').forEach(t => {
+        t.style.borderColor = t.dataset.url === url ? 'var(--accent, #c0e864)' : 'transparent';
+    });
+}
+
 function loadCameraWidget() {
-    fetch('/api/camera/latest')
+    const empty = document.getElementById('camera-empty');
+    const section = document.getElementById('camera-section');
+
+    fetch('/api/camera/history', { credentials: 'same-origin' })
         .then(r => {
-            if (!r.ok) throw new Error('no camera');
+            if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         })
-        .then(data => {
-            if (!data.ok) throw new Error('no photo');
-            const section = document.getElementById('camera-section');
-            const img = document.getElementById('camera-img');
-            const empty = document.getElementById('camera-empty');
-            const tsEl = document.getElementById('camera-timestamp');
-            // Reset estado (por si una carga previa fallo)
-            img.style.display = 'block';
-            empty.style.display = 'none';
-            // Handler: si la nueva src no carga, mostrar empty
-            img.onerror = () => {
-                img.style.display = 'none';
+        .then(snaps => {
+            console.log('[camera] /api/camera/history →', snaps);
+            if (!Array.isArray(snaps)) {
+                empty.textContent = 'API devolvió ' + (typeof snaps) + ', no array';
                 empty.style.display = 'flex';
-            };
-            // Append timestamp query string to bypass cache
-            img.src = data.url + '?t=' + Date.now();
-            // Pull timestamp from filename (snap_YYYYMMDD_HHMMSS.jpg)
-            const m = (data.filename || '').match(/snap_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
-            if (m) {
-                tsEl.textContent = `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`;
-            } else {
-                tsEl.textContent = data.filename || '--:--';
+                section.style.display = '';
+                return;
             }
+            if (snaps.length === 0) {
+                empty.textContent = 'Sin fotos en la galería';
+                empty.style.display = 'flex';
+                section.style.display = '';
+                return;
+            }
+
+            const thumbsEl = document.getElementById('camera-thumbs');
+
+            // Pintamos la mas reciente como principal
+            const latest = snaps[0];
+            console.log('[camera] latest →', latest);
+            if (!latest.url) {
+                empty.textContent = 'Snapshot sin url: ' + JSON.stringify(latest).slice(0, 80);
+                empty.style.display = 'flex';
+                section.style.display = '';
+                return;
+            }
+            showCameraPhoto(latest.url, fmtCameraTimestamp(latest.timestamp || latest.filename));
+
+            // Tira de miniaturas (hasta 12)
+            thumbsEl.innerHTML = '';
+            snaps.slice(0, 12).forEach((s, idx) => {
+                if (!s.url) return;
+                const thumb = document.createElement('img');
+                thumb.src = s.url;
+                thumb.alt = s.timestamp || s.filename || '';
+                thumb.title = fmtCameraTimestamp(s.timestamp || s.filename);
+                thumb.dataset.url = s.url;
+                thumb.style.cssText = `
+                    width: 76px; height: 57px; object-fit: cover; flex-shrink: 0;
+                    border-radius: 4px; cursor: pointer; opacity: 0.85;
+                    border: 2px solid ${idx === 0 ? 'var(--accent, #c0e864)' : 'transparent'};
+                    transition: opacity 0.15s, border-color 0.15s;
+                `;
+                thumb.onmouseenter = () => { thumb.style.opacity = '1'; };
+                thumb.onmouseleave = () => { thumb.style.opacity = '0.85'; };
+                thumb.onclick = () => showCameraPhoto(s.url, fmtCameraTimestamp(s.timestamp || s.filename));
+                thumbsEl.appendChild(thumb);
+            });
+
             section.style.display = '';
         })
-        .catch(() => {
-            // No camera o no photos yet → seccion oculta
+        .catch(err => {
+            console.error('[camera] error:', err);
+            empty.textContent = 'Error: ' + err.message;
+            empty.style.display = 'flex';
+            section.style.display = '';
         });
 }
 
@@ -1201,6 +1294,52 @@ function snapCameraPhoto() {
 
 // Auto-refresh de la foto cada 5 min (por si vino una nueva del timer)
 setInterval(loadCameraWidget, 5 * 60 * 1000);
+
+// ============================================================
+// CULTIVO (Diagnóstico IA) WIDGET
+// ============================================================
+function loadCultivoWidget() {
+    fetch('/api/cultivo/latest', { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data || !data.ok || !data.analysis) return;
+            const a = data.analysis;
+            const section = document.getElementById('cultivo-section');
+            const health = document.getElementById('cultivo-health');
+            health.textContent = a.salud_general;
+            health.style.color = a.salud_general >= 7 ? '#6ee07b' : a.salud_general >= 5 ? '#f0b840' : '#f06464';
+
+            const pills = document.getElementById('cultivo-pills');
+            pills.innerHTML = '';
+            const addPill = (text, isAlert) => {
+                const span = document.createElement('span');
+                span.style.cssText = `padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; font-family: 'JetBrains Mono', monospace; ${isAlert ? 'background: rgba(240,100,100,0.18); color: #ff8080;' : 'background: rgba(255,255,255,0.06); color: var(--text);'}`;
+                span.textContent = text;
+                pills.appendChild(span);
+            };
+            addPill(a.etapa_estimada || '?', false);
+            addPill('vigor ' + (a.vigor || '?'), false);
+            if (a.signos_plagas?.detectado) addPill('⚠ plagas', true);
+            if (a.signos_deficiencias?.detectado) addPill('⚠ deficiencias', true);
+
+            const summary = document.getElementById('cultivo-summary');
+            const firstReco = (a.recomendaciones || [])[0];
+            summary.textContent = firstReco || a.color_follaje || 'Sin recomendaciones urgentes ✓';
+
+            const when = document.getElementById('cultivo-when');
+            const ts = data.analyzed_at || data.timestamp || '';
+            const m = ts.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+            when.textContent = m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : '--';
+            document.getElementById('cultivo-confidence').textContent = a.confianza || '?';
+
+            section.style.display = '';
+        })
+        .catch(() => {});
+}
+
+if (document.readyState === 'complete') loadCultivoWidget();
+else window.addEventListener('load', loadCultivoWidget);
+setInterval(loadCultivoWidget, 10 * 60 * 1000);  // refresh cada 10 min
 window.addEventListener('resize', () => { drawChart(); drawAllSparklines(); });
 // Retry once more after layout/fonts settle, in case first draw happened before canvas had size
 setTimeout(() => { drawChart(); drawAllSparklines(); }, 1200);

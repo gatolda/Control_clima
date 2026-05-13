@@ -519,10 +519,77 @@ def camera_history():
     snapshots = camera_manager.list_snapshots(limit=50)
     return jsonify(snapshots)
 
+@app.route("/api/camera/snapshot/<int:snapshot_id>")
+@login_required
+def camera_snapshot_detail(snapshot_id):
+    snap = db.get_camera_snapshot(snapshot_id)
+    if not snap:
+        return jsonify({"ok": False, "error": "snapshot_not_found"}), 404
+    return jsonify({"ok": True, **snap})
+
+@app.route("/api/camera/analyze/<int:snapshot_id>", methods=["POST"])
+@role_required("admin", "operator")
+def camera_analyze(snapshot_id):
+    """Dispara analisis IA del snapshot. Guarda el resultado en DB."""
+    snap = db.get_camera_snapshot(snapshot_id)
+    if not snap:
+        return jsonify({"ok": False, "error": "snapshot_not_found"}), 404
+
+    # Si ya esta analizado, devolver el cache (a menos que se pida force)
+    force = (request.args.get("force") or request.json and request.json.get("force")) if request.is_json else request.args.get("force")
+    if snap.get("analysis") and not force:
+        return jsonify({"ok": True, "cached": True, "analysis": snap["analysis"], "snapshot_id": snapshot_id})
+
+    # Contexto adicional: etapa actual del ciclo
+    extra = None
+    try:
+        cfg_rows = db.get_all_config() if hasattr(db, "get_all_config") else {}
+        stage = cfg_rows.get("stage") if isinstance(cfg_rows, dict) else None
+        if stage:
+            extra = f"Etapa actual del cultivo: {stage}"
+    except Exception:
+        pass
+
+    try:
+        from core.vision_analyzer import analyze_image
+        image_path = os.path.join(CAPTURE_DIR, snap["filename"])
+        analysis = analyze_image(image_path, extra_context=extra)
+    except RuntimeError as e:
+        # Config: SDK no instalado o ANTHROPIC_API_KEY faltante
+        return jsonify({"ok": False, "error": str(e)}), 503
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"vision_failed: {e}"}), 500
+
+    db.save_snapshot_analysis(snapshot_id, analysis)
+    return jsonify({"ok": True, "cached": False, "analysis": analysis, "snapshot_id": snapshot_id})
+
 @app.route("/camera")
 @login_required
 def camera_gallery():
     return render_template("camera.html")
+
+# --- Cultivo (analisis IA agregado) ---
+
+@app.route("/cultivo")
+@login_required
+def cultivo_page():
+    return render_template("cultivo.html")
+
+@app.route("/api/cultivo/latest")
+@login_required
+def cultivo_latest():
+    latest = db.get_latest_analysis()
+    if not latest:
+        return jsonify({"ok": False, "error": "sin_analisis"}), 404
+    return jsonify({"ok": True, **latest})
+
+@app.route("/api/cultivo/history")
+@login_required
+def cultivo_history():
+    days = request.args.get("days", 30, type=int)
+    limit = request.args.get("limit", 60, type=int)
+    items = db.get_analyses_history(limit=limit, days=days)
+    return jsonify({"ok": True, "count": len(items), "items": items})
 
 # --- Climate Controller API ---
 

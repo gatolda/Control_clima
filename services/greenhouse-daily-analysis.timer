@@ -1,0 +1,15 @@
+[Unit]
+Description=Run greenhouse daily AI analysis at 14:00
+Requires=greenhouse-daily-analysis.service
+
+[Timer]
+# Cada día a las 14:00. Eligido por:
+#  - 8h acumuladas con luz LED (plantas en máxima expresión visual)
+#  - Mejor balance de blancos / exposición estable
+#  - Genera tendencia diaria comparable día a día
+OnCalendar=*-*-* 14:00:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

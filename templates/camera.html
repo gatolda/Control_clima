@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark" data-density="normal"{% if user.is_authenticated %} data-role="{{ user.role }}"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -78,11 +78,99 @@
             padding: 8px 14px;
             border-radius: 6px;
         }
+        .lightbox-inner {
+            display: flex;
+            gap: 18px;
+            max-height: 92vh;
+            max-width: 96vw;
+            align-items: stretch;
+            cursor: default;
+        }
+        .lightbox-img-wrap {
+            flex: 1 1 60%;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .lightbox-img-wrap img {
+            max-width: 100%;
+            max-height: 92vh;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .analysis-pane {
+            flex: 0 0 360px;
+            background: var(--bg-surface, #15161c);
+            border: 1px solid var(--border, #2a2c36);
+            border-radius: 8px;
+            padding: 14px 16px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text, #e6e7ec);
+            line-height: 1.5;
+        }
+        .analysis-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 12px;
+            color: var(--text-muted, #8a8b95);
+            text-align: center;
+        }
+        .analysis-btn {
+            background: var(--accent, #c0e864);
+            color: #0a0b0e;
+            border: 0;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .analysis-btn:disabled { opacity: 0.6; cursor: wait; }
+        .analysis-field { margin: 8px 0; }
+        .analysis-field b { color: var(--text-muted, #8a8b95); display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+        .health-score { font-size: 32px; font-weight: 700; }
+        .health-score.good { color: #6ee07b; }
+        .health-score.warn { color: #f0b840; }
+        .health-score.bad { color: #f06464; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; background: rgba(255,255,255,0.06); color: var(--text, #e6e7ec); margin-right: 4px; }
+        .badge.alert { background: rgba(240, 100, 100, 0.18); color: #ff8080; }
+        .badge.ok { background: rgba(110, 224, 123, 0.16); color: #6ee07b; }
+        .reco-list { margin: 4px 0 0 0; padding-left: 18px; }
+        .reco-list li { margin: 4px 0; }
     </style>
 </head>
 <body>
-<div class="layout">
-    {% include '_sidebar.html' ignore missing %}
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>
+            </div>
+            <div class="sidebar-brand-text">
+                <div class="sidebar-brand-title">Control Climatico</div>
+                <div class="sidebar-brand-subtitle">Invernadero</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="sidebar-nav-section">Monitoreo</div>
+            <a href="/" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+            <a href="/calendar" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><span>Calendario</span></a>
+            <a href="/cycles" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/></svg><span>Ciclos</span></a>
+            <a href="/diagnostics" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Diagnosticos</span></a>
+            <a href="/camera" class="nav-item active"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>Cámara</span></a>
+            <a href="/cultivo" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg><span>Cultivo</span></a>
+            <div class="sidebar-nav-section">Configuracion</div>
+            <a href="/inventory" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>Inventario</span></a>
+            <a href="/settings" class="nav-item"><svg class="nav-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg><span>Ajustes</span></a>
+        </nav>
+    </aside>
     <main class="main">
         <header class="topbar">
             <h1 class="page-title">Galería del cultivo</h1>
@@ -100,8 +188,15 @@
     </main>
 </div>
 
-<div id="lightbox" class="lightbox" onclick="closeLightbox()">
-    <img id="lightbox-img" src="" alt="">
+<div id="lightbox" class="lightbox" onclick="onLightboxBackdropClick(event)">
+    <div class="lightbox-inner" onclick="event.stopPropagation()">
+        <div class="lightbox-img-wrap">
+            <img id="lightbox-img" src="" alt="">
+        </div>
+        <aside class="analysis-pane" id="analysis-pane">
+            <!-- contenido inyectado por renderAnalysisPane() -->
+        </aside>
+    </div>
     <div id="lightbox-meta" class="lightbox-meta"></div>
 </div>
 
@@ -131,9 +226,14 @@ function loadGallery() {
             snaps.forEach(s => {
                 const item = document.createElement('div');
                 item.className = 'gallery-item';
+                item.style.position = 'relative';
                 item.onclick = () => openLightbox(s);
+                const analysisIcon = s.has_analysis
+                    ? '<div title="Analizado con IA" style="position:absolute;top:8px;right:8px;background:rgba(192,232,100,0.92);color:#0a0b0e;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;font-family:JetBrains Mono,monospace">🤖 IA</div>'
+                    : '';
                 item.innerHTML = `
                     <img class="gallery-thumb" loading="lazy" src="${s.url}" alt="">
+                    ${analysisIcon}
                     <div class="gallery-meta">
                         <span class="ts">${fmtTs(s.timestamp)}</span>
                         <span>${fmtSize(s.file_size)}${s.brightness != null ? ' · ' + Math.round(s.brightness) + 'b' : ''}</span>
@@ -147,16 +247,144 @@ function loadGallery() {
         });
 }
 
+let currentSnapshotId = null;
+
 function openLightbox(s) {
+    currentSnapshotId = s.id || null;
     document.getElementById('lightbox-img').src = s.url;
     document.getElementById('lightbox-meta').textContent =
         `${fmtTs(s.timestamp)} · ${fmtSize(s.file_size)}` +
         (s.brightness != null ? ` · brightness ${Math.round(s.brightness)}` : '');
     document.getElementById('lightbox').classList.add('open');
+
+    // Render placeholder mientras cargamos
+    renderAnalysisPane({ loading: true });
+
+    // Si la lista ya nos dijo que hay analisis, buscarlo en el server (para
+    // tener el JSON completo). Si no, mostrar boton "Analizar".
+    if (s.id) {
+        fetch(`/api/camera/snapshot/${s.id}`, { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok && data.analysis) {
+                    renderAnalysisPane({ analysis: data.analysis });
+                } else {
+                    renderAnalysisPane({ empty: true });
+                }
+            })
+            .catch(err => renderAnalysisPane({ error: err.message }));
+    } else {
+        renderAnalysisPane({ empty: true, noId: true });
+    }
+}
+
+function onLightboxBackdropClick(event) {
+    if (event.target === event.currentTarget) closeLightbox();
 }
 
 function closeLightbox() {
     document.getElementById('lightbox').classList.remove('open');
+    currentSnapshotId = null;
+}
+
+function renderAnalysisPane(state) {
+    const pane = document.getElementById('analysis-pane');
+    if (state.loading) {
+        pane.innerHTML = '<div class="analysis-empty">Cargando…</div>';
+        return;
+    }
+    if (state.error) {
+        pane.innerHTML = `<div class="analysis-empty">Error: ${state.error}</div>`;
+        return;
+    }
+    if (state.empty) {
+        const btn = state.noId
+            ? '<div style="color:var(--text-muted)">Snapshot sin id<br>(galería filesystem)</div>'
+            : `<button class="analysis-btn" onclick="triggerAnalysis()">🤖 Analizar con IA</button>`;
+        pane.innerHTML = `
+            <div class="analysis-empty">
+                <div style="font-size:32px;opacity:0.4">🌱</div>
+                <div>Esta foto aún no fue analizada</div>
+                ${btn}
+                <div style="font-size:10px;opacity:0.5;margin-top:8px">Claude Opus 4.7 · ~$0.03/foto</div>
+            </div>`;
+        return;
+    }
+    if (state.analyzing) {
+        pane.innerHTML = `
+            <div class="analysis-empty">
+                <div style="font-size:32px">⏳</div>
+                <div>Analizando con Claude Vision…</div>
+                <div style="font-size:10px;opacity:0.5">~10-30 segundos</div>
+            </div>`;
+        return;
+    }
+    // Render del analisis
+    const a = state.analysis;
+    const scoreClass = a.salud_general >= 7 ? 'good' : a.salud_general >= 5 ? 'warn' : 'bad';
+    const vigorBadge = `<span class="badge">${a.vigor || '?'}</span>`;
+    const stageBadge = `<span class="badge">${(a.etapa_estimada || '?').replace(/_/g, ' ')}</span>`;
+    const plagasBadge = a.signos_plagas?.detectado
+        ? `<span class="badge alert">⚠ plagas</span>`
+        : `<span class="badge ok">sin plagas</span>`;
+    const defBadge = a.signos_deficiencias?.detectado
+        ? `<span class="badge alert">⚠ deficiencias</span>`
+        : `<span class="badge ok">sin deficiencias</span>`;
+
+    const recos = (a.recomendaciones || []).length
+        ? `<ul class="reco-list">${a.recomendaciones.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>`
+        : `<div style="color:var(--text-muted)">Sin recomendaciones urgentes ✓</div>`;
+
+    const detalles = [];
+    if (a.signos_plagas?.detectado && a.signos_plagas.descripcion) {
+        detalles.push(`<div class="analysis-field"><b>Plagas detectadas</b>${escapeHtml(a.signos_plagas.descripcion)}</div>`);
+    }
+    if (a.signos_deficiencias?.detectado && a.signos_deficiencias.descripcion) {
+        detalles.push(`<div class="analysis-field"><b>Deficiencias</b>${escapeHtml(a.signos_deficiencias.descripcion)}</div>`);
+    }
+
+    pane.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+                <div style="font-size:10px;opacity:0.6;letter-spacing:0.05em;text-transform:uppercase">Salud general</div>
+                <div class="health-score ${scoreClass}">${a.salud_general}<span style="font-size:14px;opacity:0.5">/10</span></div>
+            </div>
+            <div style="text-align:right;font-size:10px;opacity:0.6">
+                confianza<br>${a.confianza || '?'}/10
+            </div>
+        </div>
+        <div style="margin-bottom:10px">${stageBadge}${vigorBadge}${plagasBadge}${defBadge}</div>
+        <div class="analysis-field"><b>Color follaje</b>${escapeHtml(a.color_follaje || '—')}</div>
+        <div class="analysis-field"><b>Sustrato</b>${escapeHtml(a.estado_sustrato || '—')}</div>
+        ${detalles.join('')}
+        <div class="analysis-field"><b>Recomendaciones</b>${recos}</div>
+        ${a.observaciones ? `<div class="analysis-field"><b>Observaciones</b><i style="opacity:0.7">${escapeHtml(a.observaciones)}</i></div>` : ''}
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;opacity:0.5;display:flex;justify-content:space-between">
+            <span>${a._model || 'Claude Opus'}</span>
+            <button class="analysis-btn" style="padding:4px 10px;font-size:10px" onclick="triggerAnalysis(true)">🔄 Re-analizar</button>
+        </div>`;
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function triggerAnalysis(force) {
+    if (!currentSnapshotId) return;
+    renderAnalysisPane({ analyzing: true });
+    const url = `/api/camera/analyze/${currentSnapshotId}` + (force ? '?force=1' : '');
+    fetch(url, { method: 'POST', credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                renderAnalysisPane({ analysis: data.analysis });
+                // Refrescar galería para que la próxima vez sepa que tiene análisis
+                loadGallery();
+            } else {
+                renderAnalysisPane({ error: data.error || 'unknown' });
+            }
+        })
+        .catch(err => renderAnalysisPane({ error: err.message }));
 }
 
 document.addEventListener('keydown', (e) => {

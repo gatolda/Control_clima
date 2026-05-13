@@ -1,0 +1,14 @@
+[Unit]
+Description=Greenhouse daily AI vision analysis (oneshot, triggered by timer)
+After=network-online.target greenhouse.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=kowen
+Group=kowen
+WorkingDirectory=/home/kowen/proyectos/Control_clima
+EnvironmentFile=/home/kowen/proyectos/Control_clima/.env
+ExecStart=/home/kowen/proyectos/Control_clima/.venv/bin/python /home/kowen/proyectos/Control_clima/bin/daily-analysis.py
+StandardOutput=append:/var/log/greenhouse-daily-analysis.log
+StandardError=append:/var/log/greenhouse-daily-analysis.log

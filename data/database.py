@@ -40,6 +40,23 @@ class Database:
         self._add_column_if_missing(conn, "crop_cycles", "harvest_date", "DATE")
         self._add_column_if_missing(conn, "crop_events", "plant_id", "INTEGER")
         self._add_column_if_missing(conn, "feed_events", "plant_id", "INTEGER")
+        # camera_snapshots: crear la tabla si no existe + migrations idempotentes
+        # (la tabla NO esta en SCHEMA porque es feature nuevo; se crea aca para
+        # que get_camera_snapshots() encuentre la tabla en DBs viejas)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS camera_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT UNIQUE NOT NULL,
+                timestamp DATETIME NOT NULL,
+                file_size INTEGER,
+                brightness REAL,
+                analysis_json TEXT,
+                analyzed_at DATETIME,
+                created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
+        self._add_column_if_missing(conn, "camera_snapshots", "analysis_json", "TEXT")
+        self._add_column_if_missing(conn, "camera_snapshots", "analyzed_at", "DATETIME")
         # Insertar config por defecto si no existe
         for key, value in DEFAULT_CONFIG.items():
             conn.execute(
@@ -893,9 +910,17 @@ class Database:
                 timestamp DATETIME NOT NULL,
                 file_size INTEGER,
                 brightness REAL,
+                analysis_json TEXT,
+                analyzed_at DATETIME,
                 created_at DATETIME DEFAULT (datetime('now', 'localtime'))
             )
         """)
+        # Migration idempotente para tablas ya creadas sin las columnas nuevas
+        for col, ddl in (("analysis_json", "TEXT"), ("analyzed_at", "DATETIME")):
+            try:
+                conn.execute(f"ALTER TABLE camera_snapshots ADD COLUMN {col} {ddl}")
+            except sqlite3.OperationalError:
+                pass  # columna ya existe
         cur = conn.execute(
             "INSERT OR IGNORE INTO camera_snapshots (filename, timestamp, file_size, brightness) VALUES (?, ?, ?, ?)",
             (filename, timestamp, file_size, brightness),
@@ -910,18 +935,113 @@ class Database:
         conn = self._get_conn()
         try:
             rows = conn.execute(
-                "SELECT id, filename, timestamp, file_size, brightness "
+                "SELECT id, filename, timestamp, file_size, brightness, analysis_json, analyzed_at "
                 "FROM camera_snapshots ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        except Exception:
-            # Tabla aun no existe (primer arranque)
+        except sqlite3.OperationalError as e:
+            # No tragar silenciosamente — si falta una columna, queremos saberlo
+            print(f"[db] get_camera_snapshots OperationalError: {e}", flush=True)
             rows = []
         conn.close()
         out = []
         for r in rows:
             d = dict(r)
             d["url"] = f"/static/camera/{d['filename']}"
+            d["has_analysis"] = bool(d.get("analysis_json"))
+            # No mandamos el JSON completo en la lista para que sea liviana
+            d.pop("analysis_json", None)
+            out.append(d)
+        return out
+
+    def get_camera_snapshot(self, snapshot_id):
+        """Devuelve un snapshot por id, incluyendo analysis_json parseado."""
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT id, filename, timestamp, file_size, brightness, analysis_json, analyzed_at "
+                "FROM camera_snapshots WHERE id = ?",
+                (snapshot_id,),
+            ).fetchone()
+        except Exception:
+            row = None
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        d["url"] = f"/static/camera/{d['filename']}"
+        raw = d.pop("analysis_json", None)
+        if raw:
+            try:
+                import json as _json
+                d["analysis"] = _json.loads(raw)
+            except Exception:
+                d["analysis"] = None
+        else:
+            d["analysis"] = None
+        return d
+
+    def save_snapshot_analysis(self, snapshot_id, analysis_dict):
+        """Guarda el JSON de analisis IA + marca analyzed_at."""
+        import json as _json
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE camera_snapshots SET analysis_json = ?, analyzed_at = datetime('now', 'localtime') WHERE id = ?",
+            (_json.dumps(analysis_dict, ensure_ascii=False), snapshot_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_latest_analysis(self):
+        """Devuelve el ultimo snapshot analizado (analysis_json no null)."""
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT id, filename, timestamp, analyzed_at, analysis_json "
+                "FROM camera_snapshots WHERE analysis_json IS NOT NULL "
+                "ORDER BY analyzed_at DESC LIMIT 1"
+            ).fetchone()
+        except Exception:
+            row = None
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        d["url"] = f"/static/camera/{d['filename']}"
+        raw = d.pop("analysis_json", None)
+        if raw:
+            try:
+                import json as _json
+                d["analysis"] = _json.loads(raw)
+            except Exception:
+                d["analysis"] = None
+        return d
+
+    def get_analyses_history(self, limit=30, days=30):
+        """Histórico de snapshots analizados, mas reciente primero."""
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT id, filename, timestamp, analyzed_at, analysis_json "
+                "FROM camera_snapshots "
+                "WHERE analysis_json IS NOT NULL "
+                "  AND analyzed_at >= datetime('now', 'localtime', ?) "
+                "ORDER BY analyzed_at DESC LIMIT ?",
+                (f"-{days} days", limit),
+            ).fetchall()
+        except Exception:
+            rows = []
+        conn.close()
+        import json as _json
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["url"] = f"/static/camera/{d['filename']}"
+            raw = d.pop("analysis_json", None)
+            try:
+                d["analysis"] = _json.loads(raw) if raw else None
+            except Exception:
+                d["analysis"] = None
             out.append(d)
         return out
 

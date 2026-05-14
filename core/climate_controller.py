@@ -108,13 +108,21 @@ class ClimateController:
         print("ClimateController: detenido")
 
     def set_mode(self, mode):
-        """Cambia entre auto/manual. Retorna True si cambio exitoso."""
+        """Cambia entre manual/auto/auto_ia. Retorna True si cambio exitoso.
+
+        - manual:   sin control automatico (usuario maneja actuadores)
+        - auto:     reglas if-then basadas en thresholds (este loop activo)
+        - auto_ia:  Claude decide cada 30 min via systemd timer; este loop
+                    de reglas queda apagado para no interferir.
+        """
+        if mode not in ("manual", "auto", "auto_ia"):
+            return False
         self.db.set_config("mode", mode)
         if mode == "auto" and not self._running:
             self.start()
-        elif mode == "manual" and self._running:
+        elif mode in ("manual", "auto_ia") and self._running:
             self._running = False
-            print("ClimateController: cambiado a manual, deteniendo control auto")
+            print(f"ClimateController: modo '{mode}' — control por reglas detenido")
         return True
 
     def is_running(self):

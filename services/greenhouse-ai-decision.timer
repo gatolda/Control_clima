@@ -1,0 +1,15 @@
+[Unit]
+Description=Trigger AI decision every 30 min (script itself exits if mode != auto_ia)
+Requires=greenhouse-ai-decision.service
+
+[Timer]
+# Corre cada 30 min. El script ai-decide.py chequea el modo al inicio
+# y sale silenciosamente si no es "auto_ia" — asi el timer puede estar
+# enabled siempre y solo el modo activa el control.
+OnBootSec=10min
+OnUnitActiveSec=30min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

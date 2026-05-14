@@ -588,6 +588,23 @@ def cultivo_latest():
         return jsonify({"ok": False, "error": "sin_analisis"}), 404
     return jsonify({"ok": True, **latest})
 
+@app.route("/api/ai/last-decision")
+@login_required
+def ai_last_decision():
+    """Ultima decision del Auto IA (para mostrar en UI)."""
+    last = db.get_latest_ai_decision()
+    if not last:
+        return jsonify({"ok": False, "error": "sin_decisiones"}), 404
+    return jsonify({"ok": True, **last})
+
+@app.route("/api/ai/decisions")
+@login_required
+def ai_decisions_list():
+    """Listado liviano de ultimas decisiones IA (timeline)."""
+    limit = request.args.get("limit", 20, type=int)
+    items = db.get_recent_ai_decisions(limit=limit)
+    return jsonify({"ok": True, "count": len(items), "items": items})
+
 @app.route("/api/cultivo/history")
 @login_required
 def cultivo_history():

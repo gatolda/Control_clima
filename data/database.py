@@ -57,6 +57,21 @@ class Database:
         """)
         self._add_column_if_missing(conn, "camera_snapshots", "analysis_json", "TEXT")
         self._add_column_if_missing(conn, "camera_snapshots", "analyzed_at", "DATETIME")
+        # ai_decisions: auditoria de cada decision del modo auto_ia
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ai_decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
+                context_json TEXT NOT NULL,
+                decision_json TEXT,
+                applied_json TEXT,
+                error TEXT,
+                tokens_input INTEGER,
+                tokens_output INTEGER,
+                cache_read_tokens INTEGER
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_decisions_timestamp ON ai_decisions(timestamp DESC)")
         # Insertar config por defecto si no existe
         for key, value in DEFAULT_CONFIG.items():
             conn.execute(
@@ -979,6 +994,82 @@ class Database:
                 d["analysis"] = None
         else:
             d["analysis"] = None
+        return d
+
+    # --- Auto IA: decisiones ---
+
+    def save_ai_decision(self, context: dict, decision: dict | None, applied: dict | None, error: str | None = None) -> int:
+        import json as _json
+        usage = (decision or {}).get("_usage", {}) if decision else {}
+        conn = self._get_conn()
+        cur = conn.execute(
+            "INSERT INTO ai_decisions (context_json, decision_json, applied_json, error, "
+            "tokens_input, tokens_output, cache_read_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                _json.dumps(context, ensure_ascii=False, default=str),
+                _json.dumps(decision, ensure_ascii=False, default=str) if decision else None,
+                _json.dumps(applied, ensure_ascii=False, default=str) if applied else None,
+                error,
+                usage.get("input_tokens"),
+                usage.get("output_tokens"),
+                usage.get("cache_read_input_tokens"),
+            ),
+        )
+        decision_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return decision_id
+
+    def get_recent_ai_decisions(self, limit: int = 5) -> list[dict]:
+        """Versiones livianas de las ultimas decisiones, para feedback al modelo."""
+        import json as _json
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT timestamp, decision_json, applied_json, error "
+                "FROM ai_decisions ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        except Exception:
+            rows = []
+        conn.close()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                dec = _json.loads(d["decision_json"]) if d["decision_json"] else {}
+                ap  = _json.loads(d["applied_json"])  if d["applied_json"]  else {}
+                out.append({
+                    "timestamp": d["timestamp"],
+                    "acciones": [{"actuador": a.get("actuador"), "estado": a.get("estado")} for a in dec.get("acciones", [])],
+                    "razonamiento": (dec.get("razonamiento_general", "") or "")[:200],
+                    "aplicadas": len(ap.get("applied", [])),
+                    "rechazadas": len(ap.get("skipped", [])) + len(ap.get("errors", [])),
+                    "error": d.get("error"),
+                })
+            except Exception:
+                continue
+        return out
+
+    def get_latest_ai_decision(self) -> dict | None:
+        """Devuelve la ultima decision completa (para UI)."""
+        import json as _json
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM ai_decisions ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        except Exception:
+            row = None
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        for k in ("context_json", "decision_json", "applied_json"):
+            if d.get(k):
+                try: d[k.replace("_json", "")] = _json.loads(d[k])
+                except Exception: pass
+                d.pop(k)
         return d
 
     def save_snapshot_analysis(self, snapshot_id, analysis_dict):

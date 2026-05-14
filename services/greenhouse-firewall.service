@@ -1,0 +1,21 @@
+[Unit]
+Description=Greenhouse firewall — port 5000 only on lo + tailscale0
+After=network-pre.target
+Before=greenhouse.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# ACCEPT en loopback (curl/scripts internos)
+ExecStart=/usr/sbin/iptables -I INPUT 1 -i lo -p tcp --dport 5000 -j ACCEPT
+# ACCEPT en tailscale0 (Caddy del VPS via Tailscale)
+ExecStart=/usr/sbin/iptables -I INPUT 2 -i tailscale0 -p tcp --dport 5000 -j ACCEPT
+# DROP cualquier otra interfaz (wlan0, eth0, etc.)
+ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 5000 -j DROP
+
+ExecStop=/usr/sbin/iptables -D INPUT -i lo -p tcp --dport 5000 -j ACCEPT
+ExecStop=/usr/sbin/iptables -D INPUT -i tailscale0 -p tcp --dport 5000 -j ACCEPT
+ExecStop=/usr/sbin/iptables -D INPUT -p tcp --dport 5000 -j DROP
+
+[Install]
+WantedBy=multi-user.target

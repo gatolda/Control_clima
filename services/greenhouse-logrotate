@@ -1,8 +1,8 @@
-# logrotate config for greenhouse logs.
-# Install to: /etc/logrotate.d/greenhouse
-# Runs daily via the system logrotate.timer.
+# logrotate config para todos los logs de greenhouse.
+# Wildcard cubre logs futuros sin tener que editar este archivo.
+# Runs daily via /etc/cron.daily/logrotate (timer del sistema).
 
-/var/log/greenhouse.log /var/log/greenhouse-watchdog.log /var/log/greenhouse-tailscale-watchdog.log /var/log/greenhouse-backup.log /var/log/greenhouse-deploy.log {
+/var/log/greenhouse*.log {
     weekly
     rotate 4
     compress

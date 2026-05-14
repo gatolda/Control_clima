@@ -118,8 +118,12 @@ def main() -> int:
 
     if RSYNC_DEST:
         try:
+            # NO usar --delete: el VPS tiene su propia retention policy GFS
+            # (via bin/prune-vps-backups.sh) que mantiene mas generaciones que
+            # el local. Si usaramos --delete, el VPS quedaria limitado a los
+            # mismos RETENTION_DAYS que el local (default 14 dias).
             subprocess.run(
-                ["rsync", "-a", "--delete", str(BACKUP_DIR) + "/", RSYNC_DEST],
+                ["rsync", "-a", str(BACKUP_DIR) + "/", RSYNC_DEST],
                 check=True,
                 capture_output=True,
                 timeout=300,

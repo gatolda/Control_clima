@@ -5,19 +5,31 @@ telegram-bot.py - Bot interactivo de Telegram para ia grow.
 Hace long-polling al Bot API y responde a comandos del admin (TELEGRAM_CHAT_ID).
 Mensajes de otros chats se ignoran silenciosamente.
 
-Comandos:
-    /start, /help   → muestra comandos disponibles
-    /status         → reporte completo del greenhouse (reutiliza send-report.py)
-    /report         → alias de /status
-    /uptime         → uptime corto del sistema
-    /ping           → respuesta rápida "pong" para verificar que el bot vive
+Comandos READ:
+    /start, /help        → muestra comandos disponibles
+    /status, /report     → reporte completo del greenhouse
+    /uptime              → uptime corto del sistema
+    /ping                → respuesta rápida "pong"
+    /photo               → toma una foto AHORA
 
-Cualquier texto que contenga "reporte", "estado", "status" → /status.
+Comandos WRITE (recovery remoto cuando SSH/Tailscale tambien cae):
+    /restart_greenhouse  → systemctl restart greenhouse.service
+    /restart_tailscale   → systemctl restart tailscaled
+    /restart_watchdog    → systemctl restart greenhouse-watchdog.service
+    /usb_reset           → USB reset al CH340 del Arduino (vía sysfs)
+    /reboot              → reinicio completo de la Pi (2-tap para confirmar)
+
+Free-text matching SOLO para comandos read (status/photo). Los write requieren
+slash explicito para evitar disparos accidentales.
+
+Cualquier comando write usa sudo via NOPASSWD (configurado para user kowen en
+/etc/sudoers.d/010-kowen-nopasswd).
 """
 from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -72,19 +84,122 @@ def send_message(token: str, chat_id: int | str, text: str, parse_mode: str = "M
 
 HELP_TEXT = """🌱 *ia grow — bot interactivo*
 
-Comandos disponibles:
-
+*Lectura:*
 • `/status` o `/report` → reporte completo (sensores, clima, servicios, recursos)
 • `/photo` → toma una foto AHORA con la cámara de la carpa
 • `/uptime` → uptime corto del sistema
 • `/ping` → verificar que el bot está vivo
 • `/help` → este mensaje
 
-También respondo a texto libre como _"dame un reporte"_, _"sacame una foto"_, _"como esta"_."""
+*Recovery remoto:*
+• `/restart_greenhouse` → reinicia la app Flask
+• `/restart_tailscale` → reinicia tailscaled (recupera SSH remoto)
+• `/restart_watchdog` → reinicia el watchdog de alertas
+• `/usb_reset` → resetea el USB del Arduino (cura CH340 colgado)
+• `/reboot` → reinicia toda la Pi (mandalo dos veces en 30s para confirmar)
+
+También respondo a texto libre como _"dame un reporte"_ o _"sacame una foto"_ (solo para lectura — los comandos de recovery requieren slash explicito)."""
+
+
+# Estado para confirmacion de /reboot (2-tap dentro de la ventana de 30s)
+PENDING_REBOOT: dict[int, float] = {}
+REBOOT_CONFIRM_WINDOW_S = 30
+
+
+def run_admin_command(
+    token: str,
+    chat_id: int,
+    label: str,
+    argv: list[str],
+    success_msg: str,
+    timeout_s: int = 30,
+) -> None:
+    """Ejecuta un comando admin con feedback a Telegram.
+
+    No ejecuta shell. argv es una lista exacta para evitar inyeccion.
+    Devuelve stderr/stdout del comando si falla.
+    """
+    send_message(token, chat_id, f"⚙️ {label}…")
+    try:
+        result = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+        if result.returncode == 0:
+            send_message(token, chat_id, f"✅ {success_msg}")
+        else:
+            err = (result.stderr or result.stdout or "").strip()[:500]
+            send_message(token, chat_id, f"❌ Falló (exit={result.returncode}): `{err or 'sin output'}`")
+    except subprocess.TimeoutExpired:
+        send_message(token, chat_id, f"⏱ Timeout ejecutando: `{label}`")
+    except Exception as e:
+        send_message(token, chat_id, f"❌ Excepción: `{e}`")
 
 
 def handle_ping(token: str, chat_id: int) -> None:
     send_message(token, chat_id, f"🏓 pong · {datetime.now():%H:%M:%S}")
+
+
+def handle_restart_greenhouse(token: str, chat_id: int) -> None:
+    run_admin_command(
+        token, chat_id,
+        "Reiniciando greenhouse.service",
+        ["sudo", "systemctl", "restart", "greenhouse.service"],
+        "greenhouse.service reiniciado. /health debería responder en ~10s.",
+    )
+
+
+def handle_restart_tailscale(token: str, chat_id: int) -> None:
+    run_admin_command(
+        token, chat_id,
+        "Reiniciando tailscaled",
+        ["sudo", "systemctl", "restart", "tailscaled"],
+        "tailscaled reiniciado. SSH remoto e iagrow.cl deberían volver en ~15s.",
+    )
+
+
+def handle_restart_watchdog(token: str, chat_id: int) -> None:
+    run_admin_command(
+        token, chat_id,
+        "Reiniciando greenhouse-watchdog",
+        ["sudo", "systemctl", "restart", "greenhouse-watchdog.service"],
+        "watchdog reiniciado.",
+    )
+
+
+def handle_usb_reset(token: str, chat_id: int) -> None:
+    script = str(PROJECT_ROOT / "bin" / "usb-reset-ch340.sh")
+    run_admin_command(
+        token, chat_id,
+        "USB reset al CH340 del Arduino",
+        ["sudo", script],
+        "USB reset enviado. Sensores deberían volver en ~15s. Mandá `/status` para confirmar.",
+    )
+
+
+def handle_reboot(token: str, chat_id: int) -> None:
+    """Reboot completo con confirmacion 2-tap (evita disparos accidentales)."""
+    now = time.time()
+    last = PENDING_REBOOT.get(chat_id, 0)
+    if now - last < REBOOT_CONFIRM_WINDOW_S:
+        send_message(
+            token, chat_id,
+            "🔄 *REINICIANDO LA PI.*\nBot offline ~2 min. Cuando vuelva voy a saludar."
+        )
+        # Popen async — el reboot mata el bot, pero mandamos el mensaje antes
+        try:
+            subprocess.Popen(["sudo", "reboot"])
+        except Exception as e:
+            send_message(token, chat_id, f"❌ No pude disparar reboot: `{e}`")
+        PENDING_REBOOT.pop(chat_id, None)
+    else:
+        PENDING_REBOOT[chat_id] = now
+        send_message(
+            token, chat_id,
+            f"⚠️ Vas a reiniciar la Pi.\nMandá `/reboot` otra vez en {REBOOT_CONFIRM_WINDOW_S}s para confirmar."
+        )
 
 
 def handle_uptime(token: str, chat_id: int) -> None:
@@ -153,6 +268,7 @@ def handle_photo(token: str, chat_id: int) -> None:
 def parse_command(text: str) -> str | None:
     """Devuelve el comando inferido del texto, o None si no se reconoce."""
     t = text.lower().strip()
+    # Read commands
     if t.startswith("/start") or t.startswith("/help") or t in ("help", "ayuda", "?"):
         return "help"
     if t.startswith("/ping") or t == "ping":
@@ -163,7 +279,19 @@ def parse_command(text: str) -> str | None:
         return "status"
     if t.startswith("/photo") or t.startswith("/foto"):
         return "photo"
-    # Texto libre: matchear palabras clave
+    # Write commands (recovery). Solo slash — no free-text para evitar
+    # disparos accidentales.
+    if t.startswith("/restart_greenhouse") or t.startswith("/restart_app"):
+        return "restart_greenhouse"
+    if t.startswith("/restart_tailscale") or t.startswith("/restart_ts"):
+        return "restart_tailscale"
+    if t.startswith("/restart_watchdog"):
+        return "restart_watchdog"
+    if t.startswith("/usb_reset") or t.startswith("/reset_arduino"):
+        return "usb_reset"
+    if t.startswith("/reboot"):
+        return "reboot"
+    # Texto libre: matchear palabras clave (read-only)
     keywords_status = ("reporte", "report", "estado", "status", "como esta", "cómo está", "informe")
     keywords_photo  = ("foto", "photo", "imagen", "picture")
     if any(k in t for k in keywords_photo):
@@ -180,6 +308,11 @@ def dispatch(token: str, chat_id: int, command: str) -> None:
         "uptime": handle_uptime,
         "status": handle_status,
         "photo": handle_photo,
+        "restart_greenhouse": handle_restart_greenhouse,
+        "restart_tailscale": handle_restart_tailscale,
+        "restart_watchdog": handle_restart_watchdog,
+        "usb_reset": handle_usb_reset,
+        "reboot": handle_reboot,
     }
     fn = handlers.get(command)
     if fn:

@@ -1417,6 +1417,55 @@ def handle_toggle(data):
 
 # --- Background thread para lecturas de sensores ---
 
+# --- Light sensor: tracking de transiciones para notificar via Telegram ---
+_last_light_state = None  # 0=oscuro, 1=luz, None=sin lectura aun
+_light_state_lock = threading.Lock()
+
+
+def _send_telegram_message(text):
+    """Manda un mensaje al admin via Bot API. No bloquea si no hay creds."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return False
+    try:
+        import requests as _req
+        _req.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+            timeout=10,
+        )
+        return True
+    except Exception as e:
+        print(f"[telegram] send error: {e}", flush=True)
+        return False
+
+
+def _check_light_transition(light_value):
+    """Detecta cambios de 0↔1 en el sensor de luz y notifica via Telegram.
+
+    No notifica la PRIMERA lectura (no es una transicion real). El filtro
+    de mediana del sensor_reader ya suaviza ruido transitorio en el umbral.
+    """
+    global _last_light_state
+    if light_value is None:
+        return
+    with _light_state_lock:
+        prev = _last_light_state
+        if light_value == prev:
+            return  # sin cambio
+        _last_light_state = light_value
+        if prev is None:
+            return  # primera lectura, no es transicion
+    from datetime import datetime as _dt
+    now_str = _dt.now().strftime("%H:%M")
+    if light_value == 1:
+        msg = f"🌞 *Luz encendida* — {now_str}"
+    else:
+        msg = f"🌙 *Luz apagada* — {now_str}"
+    _send_telegram_message(msg)
+
+
 def sensor_background_thread():
     global latest_sensor_data
     print("Background thread de sensores iniciado")
@@ -1452,11 +1501,23 @@ def sensor_background_thread():
                 except Exception:
                     vpd = None
 
+            # Iluminacion: binario 0=oscuro / 1=luz desde el sensor LDR digital
+            # (KY-018 en D7 del Arduino). Triggea notificacion Telegram en
+            # cualquier transicion 0↔1 detectada por el sensor.
+            light_value = None
+            try:
+                light_reading = sensor_reader.read_variable("iluminacion")
+                light_value = light_reading.get("value")
+                _check_light_transition(light_value)
+            except Exception as _e:
+                print(f"[light] error: {_e}", flush=True)
+
             # Reconstruir datos filtrados
             filtered = {
                 "temperatura_humedad": {"temperature": temp, "humidity": hum},
                 "co2": {"co2": co2},
                 "vpd": {"vpd": vpd},
+                "iluminacion": {"value": light_value},
                 "_ts": time.time(),
             }
 
@@ -1466,7 +1527,7 @@ def sensor_background_thread():
             # Guardar en base de datos
             db.save_reading(temp, hum, co2)
 
-            print(f"Sensores: temp={temp}, hum={hum}, co2={co2}", flush=True)
+            print(f"Sensores: temp={temp}, hum={hum}, co2={co2}, luz={light_value}", flush=True)
             socketio.emit("sensor_data", filtered)
 
             # Leer sensores de suelo (Arduino) si disponibles

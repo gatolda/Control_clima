@@ -114,6 +114,11 @@
                 <span class="status-bar-value" id="sb-val-soil">--</span>
             </div>
             <div class="status-bar-item">
+                <span class="status-bar-dot" id="sb-dot-light"></span>
+                <span class="status-bar-label">Luz</span>
+                <span class="status-bar-value" id="sb-val-light">--</span>
+            </div>
+            <div class="status-bar-item">
                 <span class="status-bar-label">Uptime</span>
                 <span class="status-bar-value" id="sb-uptime">--</span>
             </div>
@@ -743,6 +748,23 @@ function updateSensors(data) {
             badge.className = 'badge ' + status;
             markUpdate('co2');
             pushChartPoint('co2', co2);
+        }
+    }
+
+    // Iluminacion (binario): 1=luz, 0=oscuro
+    if (data.iluminacion) {
+        const v = data.iluminacion.value;
+        const valEl = document.getElementById('sb-val-light');
+        const dotEl = document.getElementById('sb-dot-light');
+        if (v === 1) {
+            valEl.textContent = '🌞 ON';
+            dotEl.className = 'status-bar-dot good';
+        } else if (v === 0) {
+            valEl.textContent = '🌙 OFF';
+            dotEl.className = 'status-bar-dot cold';
+        } else {
+            valEl.textContent = '--';
+            dotEl.className = 'status-bar-dot';
         }
     }
 }

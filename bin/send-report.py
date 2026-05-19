@@ -116,11 +116,15 @@ def get_sensors() -> dict:
             out["vpd"]         = {"value": row["vpd"]}         if row["vpd"]         is not None else None
             out["_timestamp"]  = row["timestamp"]
 
-        # Humedad de suelo: ultima lectura por zona
+        # Humedad de suelo: ultima lectura por zona, descartando valores stale.
+        # Sin el filtro de tiempo, el reporte mostraba humedad fantasma cuando
+        # el Arduino estaba caido y los valores de DB eran de hace horas/dias
+        # (incidente 2026-05-18: 67.1% mostrado tras 16h sin lecturas).
         soil_rows = conn.execute("""
             SELECT zone_id, value, MAX(timestamp) as ts
             FROM soil_readings
             WHERE variable = 'humedad_suelo'
+              AND timestamp > datetime('now', 'localtime', '-10 minutes')
             GROUP BY zone_id
         """).fetchall()
         if soil_rows:
@@ -176,12 +180,21 @@ def get_mem() -> str:
     return "?"
 
 
-def get_tailscale() -> str:
+def tailscale_connected() -> bool:
+    """Tailscale realmente conectado al tailnet (no solo daemon corriendo).
+
+    Verifica BackendState == "Running" AND Self.Online == true. Sin el segundo
+    check, un daemon que perdio contacto con el coordinador da ✅ falso
+    (incidente 2026-05-18). Es exactamente el mismo check que hace el
+    tailscale-watchdog.sh.
+    """
+    import json
     try:
-        out = subprocess.check_output(["tailscale", "status", "--self=true"], text=True, timeout=5)
-        return "online" if out.strip() else "?"
+        out = subprocess.check_output(["tailscale", "status", "--json"], text=True, timeout=5)
+        data = json.loads(out)
+        return data.get("BackendState") == "Running" and data.get("Self", {}).get("Online") is True
     except Exception:
-        return "?"
+        return False
 
 
 def systemctl_active(unit: str) -> bool:
@@ -229,11 +242,13 @@ def build_report() -> str:
     if not s_lines and last_age is not None:
         s_lines.append(f"  Última lectura: hace {int(last_age)}s")
 
-    # Servicios
+    # Servicios. Para tailscale chequeamos conectividad real (no solo daemon
+    # activo), porque un tailscaled vivo pero desconectado del coordinador
+    # mostraba ✅ falso en el reporte (incidente 2026-05-18).
     svc = {
         "greenhouse": systemctl_active("greenhouse.service"),
         "watchdog": systemctl_active("greenhouse-watchdog.service"),
-        "tailscale": systemctl_active("tailscaled"),
+        "tailscale": tailscale_connected(),
     }
 
     icon = "🟢" if status == "ok" and not failsafe else ("🔴" if status == "error" else "🟡")

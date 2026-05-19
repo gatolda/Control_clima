@@ -15,6 +15,11 @@ class Database:
     def _get_conn(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        # WAL: lectores concurrentes no bloquean al escritor (y viceversa).
+        # Persiste en el archivo, set en cada conn es no-op despues del primero.
+        conn.execute("PRAGMA journal_mode=WAL")
+        # Si otra conn tiene el lock, esperar hasta 5s en vez de fallar inmediato.
+        conn.execute("PRAGMA busy_timeout=5000")
         return conn
 
     def _add_column_if_missing(self, conn, table, col, type_):

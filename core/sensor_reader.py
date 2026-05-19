@@ -219,6 +219,11 @@ class SensorReader:
         temp = self.read_variable("temperatura")
         hum = self.read_variable("humedad")
         co2 = self.read_variable("co2")
+        # Triggear lectura de iluminacion para que /health refleje su estado
+        # en `sensor_health`. El valor no se devuelve aca (climate_controller
+        # no lo usa todavia), solo importa que pase por read_variable() para
+        # popular _sensor_status["light_1"].
+        self.read_variable("iluminacion")
 
         return {
             "temperatura_humedad": {

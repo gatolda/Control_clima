@@ -21,6 +21,7 @@ _VARIABLE_TO_FIELD = {
     "humedad": "humidity",
     "co2": "co2",
     "humedad_suelo": "humidity",
+    "iluminacion": "light_detected",
 }
 
 
@@ -37,6 +38,7 @@ class SensorReader:
         "co2": (0, 5000),
         "humedad_suelo": (0, 100),
         "ph_suelo": (0, 14),
+        "iluminacion": (0, 1),  # binario: 1=luz, 0=oscuro
     }
 
     # Mediana movil sobre las ultimas N lecturas por sensor para descartar spikes

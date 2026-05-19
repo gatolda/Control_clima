@@ -40,6 +40,15 @@ sensores:
       arduino_field: "humidity"
       zona: "zona_1"
 
+  iluminacion:
+    # Sensor digital LDR (KY-018) en D7 del Arduino. Cross-check de que el LED
+    # este realmente prendido cuando el schedule dice ON. Valor binario: 1=luz
+    # detectada, 0=oscuro. No mide lux ni intensidad.
+    - id: "light_1"
+      tipo: ARDUINO_SERIAL
+      arduino_field: "light_detected"
+      ubicacion: "canopy"
+
 
 # Arduino hub
 arduino:

@@ -12,6 +12,7 @@
  *   D2  ── DHT22 #1                 (temperatura + humedad, ubicación principal)
  *   D3  ── MH-Z19D PWM out          (CO2; pin de interrupt INT1)
  *   D4  ── DHT22 #2                 (temperatura + humedad, ubicación secundaria)
+ *   D7  ── LDR digital (KY-018)     (deteccion luz on/off para cross-check del LED)
  *   A0  ── Capacitive soil moisture S1 (esquina sup izq)
  *   A1  ── ...                       S2 (esquina sup der)
  *   A2  ── ...                       S3 (centro fila 2 izq)
@@ -47,6 +48,13 @@ const unsigned long HEARTBEAT_INTERVAL_MS = 30000UL;
 #define DHT_PIN_1 2
 #define DHT_PIN_2 4
 #define DHT_TYPE DHT22
+
+// LDR digital (KY-018 o similar). El comparador del modulo es active-low:
+// DO=LOW cuando la luz supera el umbral del potenciometro, HIGH cuando esta
+// oscuro. Normalizamos a 1=luz / 0=oscuro al emitir el JSON.
+// Si tu modulo es polaridad opuesta, cambia LIGHT_ACTIVE_LOW a false.
+#define LIGHT_PIN 7
+#define LIGHT_ACTIVE_LOW true
 
 // MH-Z19D (UART via Serial3: D14=TX3 al Rx del sensor, D15=RX3 al Tx del sensor)
 // UART es mas preciso que PWM y necesario para que el sensor entre en modo
@@ -108,6 +116,8 @@ void setup() {
     for (int i = 0; i < SOIL_COUNT; i++) {
         pinMode(SOIL_PINS[i], INPUT);
     }
+
+    pinMode(LIGHT_PIN, INPUT);
 
     loadCalibrations();
 
@@ -412,6 +422,18 @@ void sendReadings() {
         Serial.print(F("}"));
         first = false;
     }
+
+    // LDR digital (KY-018). Emitimos value=1 cuando hay luz, 0 cuando oscuro.
+    int light_raw = digitalRead(LIGHT_PIN);
+    int light_detected = (LIGHT_ACTIVE_LOW ? (light_raw == LOW ? 1 : 0)
+                                           : (light_raw == HIGH ? 1 : 0));
+    if (!first) Serial.print(F(","));
+    Serial.print(F("{\"id\":\"light_1\",\"type\":\"light_detected\",\"value\":"));
+    Serial.print(light_detected);
+    Serial.print(F(",\"raw\":"));
+    Serial.print(light_raw);
+    Serial.print(F("}"));
+    first = false;
 
     // Soil sensors
     for (int i = 0; i < SOIL_COUNT; i++) {

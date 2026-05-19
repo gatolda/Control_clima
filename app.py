@@ -23,6 +23,15 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
+# Hardening de cookies de sesion (auditoria de seguridad 2026-05-19):
+# - HTTPONLY: bloquea acceso desde JS (anti-XSS) — Flask default ya es True
+# - SECURE: la cookie solo viaja por HTTPS. Caddy termina TLS y forwardea
+#   HTTP a la app, asi que necesitamos `SESSION_COOKIE_SECURE=True` Y que
+#   Caddy mande `X-Forwarded-Proto: https` para que Flask lo respete.
+# - SAMESITE Strict: evita ataques CSRF cross-origin
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # --- Autenticacion ---
@@ -1444,7 +1453,10 @@ def _send_telegram_message(text):
         )
         return True
     except Exception as e:
-        print(f"[telegram] send error: {e}", flush=True)
+        # Scrub el token del mensaje de error — RequestException lo incluye
+        # en el str() del URL. Fix de auditoria de seguridad 2026-05-19.
+        err = str(e)[:200].replace(token, "***") if token else str(e)[:200]
+        print(f"[telegram] send error: {type(e).__name__}: {err}", flush=True)
         return False
 
 

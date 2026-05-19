@@ -49,6 +49,18 @@ ESCALATION_OFFSETS_S = [3600, 14400, 43200]  # 1h, 4h, 12h
 RECURRING_AFTER_LAST_S = 86400               # luego cada 24h
 
 
+def _scrub(msg: str) -> str:
+    """Saca el bot token de mensajes de error antes de loguearlos.
+
+    RequestException incluye el URL completo (con token) en str(). Sin
+    scrub, cada error deja el token expuesto en logs. Fix de auditoria
+    de seguridad 2026-05-19.
+    """
+    if msg and BOT_TOKEN and BOT_TOKEN in msg:
+        msg = msg.replace(BOT_TOKEN, "***")
+    return msg
+
+
 def send_telegram(text: str) -> bool:
     if not BOT_TOKEN or not CHAT_ID:
         print(f"[watchdog] WARN: TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no definidos. Mensaje no enviado:\n{text}", flush=True)
@@ -58,9 +70,9 @@ def send_telegram(text: str) -> bool:
         r = requests.post(url, data={"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}, timeout=10)
         if r.ok:
             return True
-        print(f"[watchdog] Telegram fallo: {r.status_code} {r.text[:200]}", flush=True)
+        print(f"[watchdog] Telegram fallo: {r.status_code} {_scrub(r.text[:200])}", flush=True)
     except Exception as e:
-        print(f"[watchdog] Telegram excepcion: {e}", flush=True)
+        print(f"[watchdog] Telegram excepcion: {type(e).__name__}: {_scrub(str(e)[:200])}", flush=True)
     return False
 
 

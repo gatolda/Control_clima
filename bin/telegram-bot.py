@@ -61,6 +61,21 @@ def load_env() -> dict[str, str]:
     return env
 
 
+def _scrub(msg: str, token: str | None = None) -> str:
+    """Saca el bot token de mensajes de error antes de loguearlos.
+
+    requests.exceptions.RequestException incluye el URL completo (con token)
+    en su str(). Sin esto, cada error de red dejaba el token expuesto en
+    /var/log/greenhouse-telegram-bot.log. Bug encontrado en auditoria de
+    seguridad 2026-05-19.
+    """
+    if not msg:
+        return msg
+    if token and token in msg:
+        msg = msg.replace(token, "***")
+    return msg
+
+
 def send_message(token: str, chat_id: int | str, text: str, parse_mode: str = "Markdown") -> bool:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
@@ -76,9 +91,9 @@ def send_message(token: str, chat_id: int | str, text: str, parse_mode: str = "M
         )
         if r.ok:
             return True
-        print(f"[{datetime.now():%H:%M:%S}] sendMessage fail {r.status_code}: {r.text[:200]}", file=sys.stderr)
+        print(f"[{datetime.now():%H:%M:%S}] sendMessage fail {r.status_code}: {_scrub(r.text[:200], token)}", file=sys.stderr)
     except Exception as e:
-        print(f"[{datetime.now():%H:%M:%S}] sendMessage exception: {e}", file=sys.stderr)
+        print(f"[{datetime.now():%H:%M:%S}] sendMessage exception: {type(e).__name__}: {_scrub(str(e)[:200], token)}", file=sys.stderr)
     return False
 
 
@@ -364,7 +379,9 @@ def poll_loop(token: str, admin_chat_id: int) -> None:
             # Normal: long-polling timeout sin updates nuevos
             continue
         except Exception as e:
-            print(f"[{datetime.now():%H:%M:%S}] poll loop exception: {e}", file=sys.stderr)
+            # NUNCA loguear `e` completo sin scrub — el URL del getUpdates
+            # incluye el bot token, y RequestException lo mete en su str().
+            print(f"[{datetime.now():%H:%M:%S}] poll loop exception: {type(e).__name__}: {_scrub(str(e)[:200], token)}", file=sys.stderr)
             time.sleep(10)
 
 

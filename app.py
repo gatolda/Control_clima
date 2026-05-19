@@ -1418,7 +1418,14 @@ def handle_toggle(data):
 # --- Background thread para lecturas de sensores ---
 
 # --- Light sensor: tracking de transiciones para notificar via Telegram ---
+# Persistimos _last_light_state a DB para sobrevivir reinicios. Sin esto, un
+# restart durante una transicion (ej: nuevo schedule apaga el LED, el GPIO
+# reset hace que la nueva instancia vea luz=0 desde el inicio) hace que la
+# transicion se trate como "estado inicial" y no se notifique. Bug encontrado
+# 2026-05-18 21:23 cuando el LED se apago a las 21:22 sin notificacion.
+_LIGHT_STATE_CONFIG_KEY = "last_light_state"
 _last_light_state = None  # 0=oscuro, 1=luz, None=sin lectura aun
+_light_state_loaded_from_db = False  # lazy load (db se inicializa despues que este modulo)
 _light_state_lock = threading.Lock()
 
 
@@ -1444,19 +1451,37 @@ def _send_telegram_message(text):
 def _check_light_transition(light_value):
     """Detecta cambios de 0↔1 en el sensor de luz y notifica via Telegram.
 
-    No notifica la PRIMERA lectura (no es una transicion real). El filtro
-    de mediana del sensor_reader ya suaviza ruido transitorio en el umbral.
+    En el primer call por process, intenta cargar el estado previo desde DB
+    para sobrevivir reinicios. Si DB no tiene valor (primera vez ever), trata
+    la primera lectura como estado inicial sin notificar. El filtro de mediana
+    del sensor_reader ya suaviza ruido transitorio en el umbral.
     """
-    global _last_light_state
+    global _last_light_state, _light_state_loaded_from_db
     if light_value is None:
         return
     with _light_state_lock:
+        # Lazy load del estado persistido (primera vez en este proceso)
+        if not _light_state_loaded_from_db:
+            try:
+                stored = db.get_config(_LIGHT_STATE_CONFIG_KEY)
+                if stored in ("0", "1"):
+                    _last_light_state = int(stored)
+            except Exception:
+                pass
+            _light_state_loaded_from_db = True
+
         prev = _last_light_state
         if light_value == prev:
             return  # sin cambio
         _last_light_state = light_value
+        # Persistir nuevo estado para sobrevivir reinicios
+        try:
+            db.set_config(_LIGHT_STATE_CONFIG_KEY, str(light_value))
+        except Exception:
+            pass
         if prev is None:
-            return  # primera lectura, no es transicion
+            return  # primera lectura ever, no es transicion real
+
     from datetime import datetime as _dt
     now_str = _dt.now().strftime("%H:%M")
     if light_value == 1:

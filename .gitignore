@@ -16,8 +16,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Secrets and environment
+# Secrets and environment — cubre nano backups (.env.save) y typos (.envecho)
 .env
+.env.*
+.envecho
 
 # Calibration and local data
 *.log
@@ -34,7 +36,13 @@ preview_server.py
 
 # Backup files
 *.bak
+*.bak-*
+*.pre-*
 *.swp
+
+# Datos operacionales generados en runtime (NO van al repo)
+data/backups/
+static/camera/
 
 # Ignore sync script logs
 sync.log

@@ -115,10 +115,11 @@ riego:
   #       ph_max: 7.0
   #       duracion_maxima_minutos: 15
 
-# Camara (habilitar cuando haya hardware)
+# Camara USB UVC (Logitech C270 en /dev/video0). 960x720 da mejor balance
+# entre nitidez y peso del archivo para el analisis IA con Claude Vision.
 camara:
-  habilitada: false
-  resolucion: [1920, 1080]
+  habilitada: true
+  resolucion: [960, 720]
   intervalo_minutos: 60
   # Requiere: ANTHROPIC_API_KEY en .env para analisis IA
 

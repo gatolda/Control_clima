@@ -1,4 +1,14 @@
 # app.py
+#
+# IMPORTANTE: eventlet.monkey_patch() debe ser lo PRIMERO antes de
+# cualquier import que use threading/socket/ssl (Flask, requests, etc.).
+# Sin esto, gunicorn con --worker-class eventlet tiene threads que no
+# cooperan con el green-thread scheduler, lo que rompe SocketIO real-time
+# updates. Bajo `python app.py` directo, el monkey_patch es benigno —
+# Werkzeug funciona igual.
+import eventlet
+eventlet.monkey_patch()
+
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, redirect, url_for, abort
 from flask_socketio import SocketIO, emit
@@ -84,7 +94,7 @@ def _handle_ratelimit(e):
             f"({e.description})"), 429
 
 
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 # --- Autenticacion ---
 login_manager = LoginManager()
@@ -1652,17 +1662,34 @@ def sensor_background_thread():
 def not_found(error):
     return "Pagina no encontrada", 404
 
+
+# --- Bootstrap de workers ---
+# Antes vivia adentro de `if __name__ == "__main__"`, lo que funcionaba con
+# `python app.py` (Werkzeug dev server) pero NO con gunicorn — gunicorn
+# importa el modulo y `__name__` queda en "app", asi que los threads nunca
+# arrancaban. Ahora corre siempre al importar. Guard con env var por si
+# alguien quiere importar app.py en un script utilitario sin arrancar todo.
+def _bootstrap_workers():
+    sensor_thread = threading.Thread(target=sensor_background_thread, daemon=True)
+    sensor_thread.start()
+    irrigation_manager.start()
+    camera_manager.start()
+    climate_controller.start()
+    # Light scheduler corre SIEMPRE (independiente del modo clima)
+    climate_controller.start_light_scheduler()
+    cloud_agent.start()  # no-op si no esta activado
+    print("Workers arrancados (sensor + irrigation + camera + climate + light + cloud)", flush=True)
+
+
+if os.environ.get("FLASK_NO_BOOTSTRAP") != "1":
+    _bootstrap_workers()
+
+
 if __name__ == "__main__":
+    # Modo dev: corre Werkzeug. En produccion sirve via gunicorn
+    # (greenhouse.service ExecStart usa gunicorn).
     try:
-        sensor_thread = threading.Thread(target=sensor_background_thread, daemon=True)
-        sensor_thread.start()
-        irrigation_manager.start()
-        camera_manager.start()
-        climate_controller.start()
-        # Light scheduler corre SIEMPRE (independiente del modo clima)
-        climate_controller.start_light_scheduler()
-        cloud_agent.start()  # no-op si no esta activado
-        print("Dashboard disponible en http://0.0.0.0:5000")
+        print("Dashboard dev mode (Werkzeug) en http://0.0.0.0:5000")
         socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
     finally:
         cloud_agent.stop()

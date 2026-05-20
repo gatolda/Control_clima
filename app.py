@@ -239,7 +239,12 @@ sensor_lock = threading.Lock()
 # --- Login ---
 
 @app.route("/login", methods=["GET", "POST"])
-@limiter.limit("5 per minute; 20 per hour", methods=["POST"], deduct_when=lambda r: r.status_code != 200)
+# 5 intentos/min, 20/hora por IP. Contamos TODO POST (no diferenciamos exitoso
+# vs fallido) — el comportamiento de Flask renderiza 200 tanto para login
+# exitoso (antes del redirect) como para password mala, asi que filtrar por
+# status_code no funciona limpiamente. Si llegas al limite con login exitoso,
+# es tu propia culpa por re-loguearte 5 veces en un minuto.
+@limiter.limit("5 per minute; 20 per hour", methods=["POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))

@@ -3,6 +3,7 @@ from functools import wraps
 from flask import Flask, render_template, jsonify, request, redirect, url_for, abort
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from core.config_loader import ConfigLoader
 from core.sensor_reader import SensorReader
 from core.actuator_manager import ActuatorManager
@@ -32,6 +33,26 @@ app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+
+# CSRF protection (auditoria 2026-05-19): protege todos los endpoints POST/
+# PUT/DELETE/PATCH contra CSRF. Tokens via:
+#   - form field `csrf_token` (login.html)
+#   - header `X-CSRFToken` (todas las AJAX — fetch monkey-patched en _sidebar.html)
+# Para tokens en templates, usamos {{ csrf_token() }} (Flask-WTF lo expone).
+# WTF_CSRF_TIME_LIMIT=None: tokens NO expiran durante la sesion (default 1h
+# obliga a re-cargar la pagina al hacer cambios despues de 1h).
+app.config["WTF_CSRF_TIME_LIMIT"] = None
+csrf = CSRFProtect(app)
+
+
+@app.errorhandler(CSRFError)
+def _handle_csrf_error(e):
+    """Devuelve JSON para AJAX, HTML para forms."""
+    if request.accept_mimetypes.best == "application/json" or request.is_json:
+        return jsonify({"ok": False, "error": "csrf_invalid", "detail": e.description}), 400
+    return f"CSRF error: {e.description}. Recarga la pagina y volve a intentar.", 400
+
+
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # --- Autenticacion ---

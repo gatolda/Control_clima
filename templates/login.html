@@ -30,6 +30,7 @@
         {% endif %}
 
         <form class="login-form" method="POST" action="/login">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="text" name="username" class="form-input" placeholder="Usuario" required autofocus>
             <input type="password" name="password" class="form-input" placeholder="Contrasena" required>
             <button type="submit" class="btn-primary login-btn">Ingresar</button>

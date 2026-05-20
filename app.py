@@ -4,6 +4,9 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, a
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect, CSRFError
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from core.config_loader import ConfigLoader
 from core.sensor_reader import SensorReader
 from core.actuator_manager import ActuatorManager
@@ -23,6 +26,13 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
+
+# ProxyFix: respeta X-Forwarded-* headers que manda Caddy. Sin esto,
+# request.remote_addr seria siempre la IP del proxy (loopback/Tailscale),
+# y request.scheme seria http aunque Caddy entregue https. Esencial para
+# rate limiting por IP real del cliente y para cookies con SECURE=True.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 # Hardening de cookies de sesion (auditoria de seguridad 2026-05-19):
 # - HTTPONLY: bloquea acceso desde JS (anti-XSS) — Flask default ya es True
@@ -51,6 +61,27 @@ def _handle_csrf_error(e):
     if request.accept_mimetypes.best == "application/json" or request.is_json:
         return jsonify({"ok": False, "error": "csrf_invalid", "detail": e.description}), 400
     return f"CSRF error: {e.description}. Recarga la pagina y volve a intentar.", 400
+
+
+# Rate limiting (auditoria 2026-05-19, item #11): proteccion brute-force
+# contra /login. Sin esto, un atacante podia probar passwords ilimitadamente
+# (fail2ban cubre SSH pero no Flask). In-memory storage es suficiente para
+# single-process app; si en el futuro hay multiples workers o Pis, mover a
+# Redis con storage_uri="redis://...".
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    storage_uri="memory://",
+)
+
+
+@app.errorhandler(429)
+def _handle_ratelimit(e):
+    """Devuelve respuesta amistosa cuando alguien excede el rate limit."""
+    if request.accept_mimetypes.best == "application/json" or request.is_json:
+        return jsonify({"ok": False, "error": "rate_limited", "detail": str(e.description)}), 429
+    return (f"Demasiados intentos. Espera un minuto y volve a intentar.\n\n"
+            f"({e.description})"), 429
 
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
@@ -208,6 +239,7 @@ sensor_lock = threading.Lock()
 # --- Login ---
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute; 20 per hour", methods=["POST"], deduct_when=lambda r: r.status_code != 200)
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))

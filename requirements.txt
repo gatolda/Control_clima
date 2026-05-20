@@ -2,6 +2,7 @@ Flask>=3.0
 flask-socketio>=5.3
 flask-login>=0.6
 Flask-WTF>=1.2
+Flask-Limiter>=3.5
 python-dotenv>=1.0
 PyYAML>=6.0
 requests>=2.31

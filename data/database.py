@@ -505,7 +505,18 @@ class Database:
         conn.close()
         return [dict(r) for r in rows]
 
+    # Columnas que se pueden updatear via update_plant/supply/cycle. La f-string
+    # del UPDATE interpola nombres de columna, asi que SI un caller pasa
+    # **request.json sin sanitizar, hay riesgo de SQL injection. La whitelist
+    # corta el riesgo en defense-in-depth (auditoria 2026-05-19).
+    _PLANT_UPDATABLE_COLS = {"name", "strain", "planted_date", "notes", "active"}
+    _SUPPLY_UPDATABLE_COLS = {"name", "category", "unit", "current_qty", "cost_per_unit",
+                              "expiry_date", "low_threshold", "notes", "active"}
+    _CYCLE_HARVEST_UPDATABLE_COLS = {"harvest_wet_g", "harvest_dry_g", "harvest_cured_g",
+                                     "harvest_notes", "harvest_date", "end_date", "active"}
+
     def update_plant(self, plant_id, **fields):
+        fields = {k: v for k, v in fields.items() if k in self._PLANT_UPDATABLE_COLS}
         if not fields: return
         cols = ", ".join(f"{k} = ?" for k in fields.keys())
         conn = self._get_conn()
@@ -546,6 +557,7 @@ class Database:
         return [dict(r) for r in rows]
 
     def update_supply(self, supply_id, **fields):
+        fields = {k: v for k, v in fields.items() if k in self._SUPPLY_UPDATABLE_COLS}
         if not fields: return
         cols = ", ".join(f"{k} = ?" for k in fields.keys())
         conn = self._get_conn()
@@ -693,6 +705,7 @@ class Database:
         return [dict(r) for r in rows]
 
     def update_cycle_harvest(self, cycle_id, **fields):
+        fields = {k: v for k, v in fields.items() if k in self._CYCLE_HARVEST_UPDATABLE_COLS}
         if not fields: return
         cols = ", ".join(f"{k} = ?" for k in fields.keys())
         conn = self._get_conn()
